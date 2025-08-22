@@ -4,7 +4,7 @@ import bodyParser from "body-parser";
 import cookieParser from "cookie-parser"; 
 import dotenv from "dotenv";
 import connectDB from "./app/dbConfig/dbConfig.js";
-// import setupRoutes from "./app/routes/index.js";
+import setupRoutes from "./app/routes/index.js";
 import mediasetup from "./app/routes/media.js"
 // import morgan from 'morgan';
 
@@ -35,7 +35,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser()); 
 
 connectDB();
-// setupRoutes(app);
+setupRoutes(app);
 mediasetup(app);
 
 app.get("/", (req, res) => {
