@@ -4,7 +4,8 @@ import ChannelPartner from "../models/channelPartner.js";
 import { handleResponse } from "../utils/helper.js";
 import { createChannelPartnerValidator } from "../validators/channelPartner.js";
 import { signAccessToken } from "../middlewares/jwtAuth.js";
-
+import { uploadToCloudinary } from "../middlewares/multer.js";
+/*
 const createChannelPartner = async (req, res) => {
   try {
     let isAdmin = false;
@@ -61,6 +62,81 @@ const createChannelPartner = async (req, res) => {
         `${field} already exists. Please use another ${field}.`
       );
     }
+    return handleResponse(res, 500, "Internal Server Error");
+  }
+};
+*/
+
+const createChannelPartner = async (req, res) => {
+  try {
+    let isAdmin = req.user?.user_role === "admin";
+
+    // ✅ Upload files to Cloudinary if present
+    let profilePhotoUrl = null;
+    let idProofUrl = null;
+
+    if (req.files?.profile_photo?.[0]?.buffer) {
+      profilePhotoUrl = await uploadToCloudinary(
+        req.files.profile_photo[0].buffer,
+        "channel_partners/profile"
+      );
+    }
+
+    if (req.files?.id_proof?.[0]?.buffer) {
+      idProofUrl = await uploadToCloudinary(
+        req.files.id_proof[0].buffer,
+        "channel_partners/id_proofs"
+      );
+    }
+
+    // Joi validation
+    const { error } = createChannelPartnerValidator.validate(
+      { ...req.body, profile_photo: profilePhotoUrl, id_proof: idProofUrl },
+      { abortEarly: false }
+    );
+
+    if (error) {
+      const messages = error.details.map((err) =>
+        err.message.replace(/"/g, "")
+      );
+      return handleResponse(res, 400, messages.join(", "));
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(req.body.password, 10);
+
+    const newPartner = new ChannelPartner({
+      ...req.body,
+      password: hashedPassword,
+      profile_photo: profilePhotoUrl,
+      id_proof: idProofUrl,
+      status: isAdmin ? "active" : "inactive",
+    });
+
+    await newPartner.save();
+
+    const partnerData = newPartner.toObject();
+    delete partnerData.password;
+    delete partnerData.__v;
+
+    return handleResponse(
+      res,
+      201,
+      isAdmin
+        ? "Channel Partner created by admin successfully"
+        : "Channel Partner registered successfully. Awaiting admin approval.",
+      partnerData
+    );
+  } catch (error) {
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return handleResponse(
+        res,
+        400,
+        `${field} already exists. Please use another ${field}.`
+      );
+    }
+    console.error(error);
     return handleResponse(res, 500, "Internal Server Error");
   }
 };
