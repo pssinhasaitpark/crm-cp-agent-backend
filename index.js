@@ -20,7 +20,10 @@ app.use(
   cors({
     origin: [
       "http://localhost:5174",
+      "http://localhost:5173",
       "http://192.168.0.147:5173",
+      "http://192.168.0.131:5173",
+      "http://192.168.0.164:5173",
       "http://192.168.0.144:5173",
     ],
     methods: ["GET", "POST", "HEAD", "PUT", "PATCH", "DELETE"],
