@@ -1,5 +1,7 @@
 import jwt from "jsonwebtoken";
-import User from '../models/user.js'
+import User from '../models/user.js';
+import Agent from "../models/agent.js";
+import ChannelPartner from "../models/channelPartner.js";
 import crypto from "crypto";
 import { handleResponse } from "../utils/helper.js";
 
@@ -69,7 +71,7 @@ export const decryptToken = (encryptedToken) => {
   decrypted += decipher.final("utf8");
   return decrypted;
 };
-
+/*
 export const verifyToken = async (req, res, next) => {
   try {
     const token = req.header("Authorization")?.replace("Bearer ", "");
@@ -95,6 +97,62 @@ export const verifyToken = async (req, res, next) => {
 
     next();
   } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError) {
+      return handleResponse(res, 403, "Invalid token. Please log in again.");
+    }
+    if (error instanceof jwt.TokenExpiredError) {
+      return handleResponse(res, 403, "Token has expired. Please log in again.");
+    }
+    return handleResponse(res, 500, "Internal server error.");
+  }
+};
+*/
+
+export const verifyToken = async (req, res, next) => {
+  try {
+    // Extract token from Authorization header
+    const token = req.header("Authorization")?.replace("Bearer ", "");
+    if (!token) {
+      return handleResponse(res, 403, "Access Denied. No token provided.");
+    }
+
+    // Verify JWT token and extract payload
+    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+    const { user_id, user_role, email } = decoded;
+
+    let user = null;
+
+    // Fetch user based on role
+    if (user_role === "admin") {
+      user = await User.findById(user_id);
+    } else if (user_role === "agent") {
+      user = await Agent.findById(user_id);
+    } else if (user_role === "channel_partner") {
+      user = await ChannelPartner.findById(user_id);
+    } else {
+      return handleResponse(res, 403, "Invalid user role.");
+    }
+
+    // If user not found, unauthorized
+    if (!user) {
+      return handleResponse(res, 403, "User not found or not authorized.");
+    }
+
+    // Attach user info to req.user for controller use
+    req.user = {
+      id: user._id.toString(),
+      user_id,
+      user_role, // role from token: "admin", "agent", or "channel_partner"
+      email,
+      username: user.username || user.name || null, // fallback to name if username missing
+      mobile_number: user.mobile_number || null,
+      agent_type: user.agent_type || null, // agent_type is only relevant for agents/channel partners
+    };
+
+    next();
+  } catch (error) {
+    console.error("Token verification error:", error);
+
     if (error instanceof jwt.JsonWebTokenError) {
       return handleResponse(res, 403, "Invalid token. Please log in again.");
     }

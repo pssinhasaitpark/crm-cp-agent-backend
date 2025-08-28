@@ -1,7 +1,7 @@
-// //app/validators/channelPartner.js
+// app/validators/agent.js
 import Joi from "joi";
 
-export const createChannelPartnerValidator = Joi.object({
+export const createAgentValidator = Joi.object({
   name: Joi.string().min(3).max(50).required().messages({
     "string.empty": "Name is required",
   }),
