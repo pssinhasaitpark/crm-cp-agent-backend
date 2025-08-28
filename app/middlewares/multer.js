@@ -1,41 +1,57 @@
 //app/middlewares/multer.js
-import { v2 as cloudinary } from "cloudinary";
-import { CloudinaryStorage } from "@fluidjs/multer-cloudinary";
 import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
+import streamifier from "streamifier";
 
 dotenv.config();
 
+// Cloudinary configuration
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: async (req, file) => {
-    let folder = "uploads"; 
-    if (file.fieldname === "profile_photo") folder = "channel_partners/profile";
-    if (file.fieldname === "id_proof") folder = "channel_partners/id_proofs";
+// Multer memory storage
+const storage = multer.memoryStorage();
 
-    return {
-      folder,
-      format: "webp",
-      transformation: [{ quality: "auto" }],
-    };
-  },
-});
-
+// File filter
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = ["image/jpeg", "image/png", "image/jpg", "application/pdf", "image/webp"];
+  const allowedTypes = [
+    "image/jpeg",
+    "image/png",
+    "image/jpg",
+    "application/pdf",
+    "image/webp",
+  ];
   if (allowedTypes.includes(file.mimetype)) cb(null, true);
   else cb(new Error("Invalid file type"), false);
 };
 
+// Multer upload middleware
 const upload = multer({ storage, fileFilter }).fields([
   { name: "profile_photo", maxCount: 1 },
   { name: "id_proof", maxCount: 1 },
 ]);
 
-export { cloudinary, upload };
+// Helper: upload buffer to Cloudinary
+const uploadToCloudinary = (buffer, folder) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder,
+        format: "webp",
+        transformation: [{ quality: "auto" }],
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result.secure_url);
+      }
+    );
+
+    streamifier.createReadStream(buffer).pipe(uploadStream);
+  });
+};
+
+export { cloudinary, upload, uploadToCloudinary };
