@@ -13,4 +13,8 @@ router.get("/", verifyToken, admin.getAllChannelPartners);
 
 router.get("/:id", verifyToken, admin.getChannelPartnerById);
 
+router.patch("/:id", verifyToken, admin.approveChannelPartnerStatusById);
+
+router.delete("/channel-partner/:id", verifyToken, admin.deleteChannelPartnerById);
+
 export default router;

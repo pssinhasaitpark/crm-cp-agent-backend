@@ -3,49 +3,64 @@ import bcrypt from "bcryptjs";
 import ChannelPartner from "../models/channelPartner.js";
 import { handleResponse } from "../utils/helper.js";
 import { createChannelPartnerValidator } from "../validators/channelPartner.js";
-import { signAccessToken } from "../middlewares/jwtAuth.js"; 
+import { signAccessToken } from "../middlewares/jwtAuth.js";
 
 const createChannelPartner = async (req, res) => {
   try {
-    if (!req.user || req.user.user_role !== "admin") {
-      return handleResponse(res, 403, "Only admin can create a channel partner");
+    let isAdmin = false;
+
+    if (req.user && req.user.user_role === "admin") {
+      isAdmin = true;
     }
 
-    const { error } = createChannelPartnerValidator.validate(req.body, { abortEarly: false });
+    // ✅ Extract file URLs
+    const profilePhotoUrl = req.files?.profile_photo?.[0]?.path || null;
+    const idProofUrl = req.files?.id_proof?.[0]?.path || null;
+
+    // Joi validation
+    const { error } = createChannelPartnerValidator.validate(
+      { ...req.body, profile_photo: profilePhotoUrl, id_proof: idProofUrl },
+      { abortEarly: false }
+    );
+
     if (error) {
       const messages = error.details.map((err) => err.message.replace(/"/g, ""));
       return handleResponse(res, 400, messages.join(", "));
     }
 
-    const { name, email, password, mobile_number } = req.body;
-
-    const existingPartner = await ChannelPartner.findOne({ email });
-    if (existingPartner) {
-      return handleResponse(res, 400, "Channel Partner already exists with this email");
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(req.body.password, 10);
 
     const newPartner = new ChannelPartner({
-      name,
-      email,
+      ...req.body,
       password: hashedPassword,
-      mobile_number,
+      profile_photo: profilePhotoUrl,
+      id_proof: idProofUrl,
+      status: isAdmin ? "active" : "inactive", // 👈 set status based on creator
     });
 
     await newPartner.save();
 
-    const partnerResponse = {
-      id: newPartner._id,
-      name: newPartner.name,
-      email: newPartner.email,
-      mobile_number: newPartner.mobile_number,
-      role: newPartner.role,
-    };
+    const partnerData = newPartner.toObject();
+    delete partnerData.password;
+    delete partnerData.__v;
 
-    return handleResponse(res, 201, "Channel Partner created successfully", partnerResponse);
+    return handleResponse(
+      res,
+      201,
+      isAdmin
+        ? "Channel Partner created by admin successfully"
+        : "Channel Partner registered successfully. Awaiting admin approval.",
+      partnerData
+    );
   } catch (error) {
-    console.error("Error creating channel partner:", error);
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return handleResponse(
+        res,
+        400,
+        `${field} already exists. Please use another ${field}.`
+      );
+    }
     return handleResponse(res, 500, "Internal Server Error");
   }
 };
@@ -55,31 +70,28 @@ const loginChannelPartner = async (req, res) => {
     const { secret_key, email, password, mobile_number, otp } = req.body;
     const errorMessages = [];
 
-    // Collect validation errors
-    if (!secret_key) errorMessages.push("Secret key is missing");
     if (!email && !mobile_number) errorMessages.push("Email or mobile number is required");
     if (email && !password) errorMessages.push("Password is required");
-    if (mobile_number && !otp) errorMessages.push("OTP is required");
 
     if (errorMessages.length > 0) {
       return handleResponse(res, 400, errorMessages.join(", "));
     }
 
-    // Check secret key
-    if (secret_key !== process.env.HARD_CODED_SECRET_KEY) {
-      return handleResponse(res, 403, "Secret key is invalid");
-    }
-
     // Option 1: Email + Password login
     if (email && password) {
-      const partner = await ChannelPartner.findOne({ email }).select('+password'); // Ensure password is included
+      const partner = await ChannelPartner.findOne({ email }).select('+password');
       if (!partner) {
         return handleResponse(res, 404, "Channel Partner not found");
       }
 
-      if (!partner.password) {
-        return handleResponse(res, 500, "Partner password not set in database");
+      // ✅ Check if account is active
+      if (partner.status !== "active") {
+        return handleResponse(res, 403, "Your account has not been verified by the admin. Please wait for admin approval.");
       }
+
+      // if (partner.deleted == "true") {
+      //   return handleResponse(res, 403, "Your account has been deleted by the admin. Please contact with admin.");
+      // }
 
       const isMatch = await bcrypt.compare(password, partner.password);
       if (!isMatch) {
@@ -101,6 +113,15 @@ const loginChannelPartner = async (req, res) => {
         return handleResponse(res, 404, "Channel Partner not found");
       }
 
+      // ✅ Check if account is active
+      if (partner.status !== "active") {
+        return handleResponse(
+          res,
+          403,
+          "Your account has not been verified by the admin. Please wait for admin approval."
+        );
+      }
+
       const token = await signAccessToken(partner._id, partner.role, partner.email);
       return handleResponse(res, 200, "Login successful", { token });
     }
@@ -114,6 +135,6 @@ const loginChannelPartner = async (req, res) => {
 };
 
 export const channelPartner = {
-    createChannelPartner,
-    loginChannelPartner
+  createChannelPartner,
+  loginChannelPartner
 }
