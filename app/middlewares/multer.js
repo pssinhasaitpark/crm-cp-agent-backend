@@ -1,6 +1,6 @@
 //app/middlewares/multer.js
 import { v2 as cloudinary } from "cloudinary";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
+import { CloudinaryStorage } from "@fluidjs/multer-cloudinary";
 import multer from "multer";
 import dotenv from "dotenv";
 
@@ -21,7 +21,7 @@ const storage = new CloudinaryStorage({
 
     return {
       folder,
-      format: "webp", 
+      format: "webp",
       transformation: [{ quality: "auto" }],
     };
   },
@@ -29,11 +29,8 @@ const storage = new CloudinaryStorage({
 
 const fileFilter = (req, file, cb) => {
   const allowedTypes = ["image/jpeg", "image/png", "image/jpg", "application/pdf", "image/webp"];
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error("Invalid file type"), false);
-  }
+  if (allowedTypes.includes(file.mimetype)) cb(null, true);
+  else cb(new Error("Invalid file type"), false);
 };
 
 const upload = multer({ storage, fileFilter }).fields([
