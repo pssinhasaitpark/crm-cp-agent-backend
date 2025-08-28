@@ -1,7 +1,7 @@
-// //app/models/channelPartner.js
+// app/models/agent.js
 import mongoose from "mongoose";
 
-const channelPartnerSchema = new mongoose.Schema(
+const agentSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
@@ -10,11 +10,11 @@ const channelPartnerSchema = new mongoose.Schema(
     state: { type: String, required: true },
     firm_name: { type: String, required: true },
     reraId: { type: String },
-    agent_type: { type: String, enum: ["agent", "channel_partner"], default: "channel_partner" },
     year_of_experience: { type: Number, required: true },
     profile_photo: { type: String, required: true },
     id_proof: { type: String, required: true },
     referral_code: { type: String },
+
     status: {
       type: String,
       enum: ["active", "inactive"],
@@ -26,4 +26,4 @@ const channelPartnerSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.model("ChannelPartner", channelPartnerSchema);
+export default mongoose.model("Agent", agentSchema);
