@@ -25,7 +25,7 @@ app.use(
       "http://192.168.0.131:5173",
       "http://192.168.0.164:5173",
       "http://192.168.0.144:5173",
-      "https://crm-cp-agent-backend.vercel.app"
+      "https://crm-cp-admin.vercel.app"
     ],
     methods: ["GET", "POST", "HEAD", "PUT", "PATCH", "DELETE"],
     optionsSuccessStatus: 200,
