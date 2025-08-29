@@ -2,6 +2,7 @@
 import bcrypt from "bcryptjs";
 import ChannelPartner from "../models/channelPartner.js";
 import { handleResponse } from "../utils/helper.js";
+import Lead from "../models/leads.js";
 import { createChannelPartnerValidator } from "../validators/channelPartner.js";
 import { signAccessToken } from "../middlewares/jwtAuth.js";
 import { uploadMultipleToCloudinary } from "../middlewares/multer.js";
@@ -11,13 +12,15 @@ const createChannelPartner = async (req, res) => {
   try {
     let isAdmin = req.user && req.user.user_role === "admin";
 
-    const { error } = createChannelPartnerValidator.validate(req.body, {
-      abortEarly: false,
+   const { error } = createChannelPartnerValidator.validate(req.body, {
+      abortEarly: false, 
     });
+
     if (error) {
-      return handleResponse(res, 400, "Validation error", {
-        errors: error.details.map((err) => err.message.replace(/"/g, "")),
-      });
+      const messages = error.details.map((err) => err.message.replace(/"/g, ""));
+      const message = messages.length === 1 ? messages[0] : "Validation error";
+      const extra = messages.length > 1 ? { errors: messages } : undefined;
+      return handleResponse(res, 400, message, extra);
     }
 
     const existingPartner = await ChannelPartner.findOne({ email: req.body.email });
@@ -130,16 +133,43 @@ const loginChannelPartner = async (req, res) => {
   }
 };
 
+const getChannelPartnerLeadCount = async (channelPartnerId) => {
+  const cpObjectId = new mongoose.Types.ObjectId(String(channelPartnerId));
+
+  const pipeline = [
+    {
+      $match: {
+        $or: [
+          // Leads jo channel partner ne create ki hain
+          { created_by_id: cpObjectId },
+          // Ya leads jo assigned_to kisi agent hain, aur wo leads channel partner ne create ki hain
+          {
+            assigned_to_model: "Agent",
+            created_by_id: cpObjectId,
+          },
+        ],
+      },
+    },
+    {
+      $count: "totalLeads",
+    },
+  ];
+
+  const result = await Lead.aggregate(pipeline);
+
+  return result.length > 0 ? result[0].totalLeads : 0;
+};
+
 const getAllChannelPartners = async (req, res) => {
   try {
     if (!req.user || req.user.user_role !== "admin") {
       return handleResponse(res, 403, "Access denied. Admins only.");
     }
 
-    const { q = "", status } = req.query;
+    const { q = "", status, page = 1, perPage = 10 } = req.query; 
 
-    let matchStage = {
-      agent_type: { $in: ["agent", "channel_partner"] },
+    const matchStage = {
+      agent_type: "channel_partner",
     };
 
     if (status) {
@@ -163,23 +193,36 @@ const getAllChannelPartners = async (req, res) => {
       }
     }
 
-    const pipeline = [
-      { $match: matchStage },
-      {
-        $project: {
-          password: 0,
-          refreshToken: 0,
-        },
-      },
-      { $sort: { createdAt: -1 } },
-    ];
+    const skip = (page - 1) * perPage;
 
-    const partners = await ChannelPartner.aggregate(pipeline);
-    const totalItem = partners.length;
+    const partners = await ChannelPartner.find(matchStage)
+      .sort({ createdAt: -1 })
+      .skip(skip) 
+      .limit(Number(perPage)) 
+      .lean();
+
+    const totalItems = await ChannelPartner.countDocuments(matchStage);
+
+    const totalPages = Math.ceil(totalItems / perPage);
+
+    const partnersWithLeads = await Promise.all(
+      partners.map(async (partner) => {
+        const leadsCount = await getChannelPartnerLeadCount(partner._id);
+        return {
+          ...partner,
+          leadsCount,
+        };
+      })
+    );
+
+    const totalItemsOnCurrentPage = partners.length;
 
     return handleResponse(res, 200, "Channel Partners fetched successfully", {
-      results: partners,
-      totalItem,
+      results: partnersWithLeads,
+      totalItems,
+      currentPage: Number(page),
+      totalPages,
+      totalItemsOnCurrentPage,  
     });
   } catch (error) {
     console.error("Error fetching channel partners:", error);
