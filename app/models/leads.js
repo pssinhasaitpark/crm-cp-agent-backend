@@ -1,4 +1,4 @@
-// /app/models/leads.js
+//app/models/leads.js
 import mongoose from "mongoose";
 
 const LeadSchema = new mongoose.Schema({
@@ -9,10 +9,21 @@ const LeadSchema = new mongoose.Schema({
   source: { type: String, required: true },
   date: { type: String, required: true },
   status: { type: String, default: "new" },
-  // created_by: { type: String, required: true },
-    created_by_role: { type: String },
-    created_by_name: { type: String },
-    created_by_id: { type: mongoose.Types.ObjectId },
+
+  address: { type: String },
+  property_type: { type: String },
+  requirement_type: { type: String },
+  budget: { type: String },
+  remark: { type: String },
+
+  assigned_to: { type: mongoose.Types.ObjectId, refPath: "assigned_to_model" },
+  assigned_to_name: { type: String },
+  assigned_to_model: { type: String, enum: ["Agent", "ChannelPartner"] },
+
+  created_by: { type: String },  
+  created_by_id: { type: mongoose.Schema.Types.ObjectId }, 
+  created_by_name: { type: String },
+
 }, { timestamps: true });
 
 export default mongoose.model("Lead", LeadSchema);

@@ -1,7 +1,7 @@
 //app/validators/leads.js
 import Joi from "joi";
 
-export const leadValidationSchema = Joi.object({
+const baseSchema = {
   name: Joi.string().required(),
   email: Joi.string().email().required(),
   phone_number: Joi.string().min(10).max(15).required(),
@@ -13,4 +13,31 @@ export const leadValidationSchema = Joi.object({
     .messages({
       "string.pattern.base": "Date must be in DD/MM/YYYY format",
     }),
-});
+};
+
+const extraFieldsSchema = {
+  address: Joi.string().required(),
+  property_type: Joi.string().required(),
+  requirement_type: Joi.string().required(),
+  budget: Joi.string().required(),
+  remark: Joi.string().required(),
+};
+
+export const getLeadValidationSchema = (userRole) => {
+  if (userRole === "agent") {
+    return Joi.object({
+      ...baseSchema,
+      ...extraFieldsSchema,
+    });
+  } else if (userRole === "channel_partner") {
+    return Joi.object({
+      ...baseSchema,
+      ...extraFieldsSchema,
+      assigned_to: Joi.string().required(),
+    });
+  } else if (userRole === "admin") {
+    return Joi.object(baseSchema);
+  } else {
+    return Joi.object(baseSchema);
+  }
+};

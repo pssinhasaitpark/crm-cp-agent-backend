@@ -21,10 +21,12 @@ app.use(
     origin: [
       "http://localhost:5174",
       "http://localhost:5173",
+      "http://localhost:8081",
       "http://192.168.0.147:5173",
       "http://192.168.0.131:5173",
       "http://192.168.0.164:5173",
       "http://192.168.0.144:5173",
+      "http://192.168.0.144:8081",
       "https://crm-cp-admin.vercel.app"
     ],
     methods: ["GET", "POST", "HEAD", "PUT", "PATCH", "DELETE"],
