@@ -387,65 +387,6 @@ const getLeadById = async (req, res) => {
   }
 };
 
-/*
-const updateLeadStatusById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-    const { user_role, id: userId, username: userName } = req.user;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return handleResponse(res, 400, "Invalid lead ID");
-    }
-
-    if (!status) {
-      return handleResponse(res, 400, "Status is required");
-    }
-
-    const allowedRoles = ["admin", "agent", "channel_partner"];
-    if (!allowedRoles.includes(user_role)) {
-      return handleResponse(res, 403, "Access Denied: Unauthorized role");
-    }
-
-    const lead = await Lead.findById(id);
-    if (!lead) {
-      return handleResponse(res, 404, "Lead not found");
-    }
-
-    // Update status
-    lead.status = status.toLowerCase();
-
-    // Add to status_updated_by array
-    lead.status_updated_by.push({
-      id: userId,
-      name: userName,
-      role: user_role,
-      updated_at: new Date(),
-    });
-
-
-    await lead.save();
-
-    // Prepare custom formatted response
-    const leadObj = lead.toObject();
-
-    const formattedStatusUpdates = leadObj.status_updated_by.map(entry => ({
-      id: entry.updated_by_id,
-      name: entry.updated_by_name,
-      role: entry.updated_by_role,
-      updated_at: entry.updated_at,
-    }));
-
-    leadObj.status_updated_by = formattedStatusUpdates;
-
-    return handleResponse(res, 200, "Lead status updated successfully", leadObj);
-  } catch (err) {
-    console.error("Error updating lead status:", err);
-    return handleResponse(res, 500, "Internal Server Error");
-  }
-};
-*/
-
 const updateLeadStatus = async ({ req, res, allowedRole }) => {
   try {
     const { id } = req.params;
