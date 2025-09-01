@@ -20,9 +20,18 @@ const LeadSchema = new mongoose.Schema({
   assigned_to_name: { type: String },
   assigned_to_model: { type: String, enum: ["Agent", "ChannelPartner"] },
 
-  created_by: { type: String },  
-  created_by_id: { type: mongoose.Schema.Types.ObjectId }, 
+  created_by: { type: String },
+  created_by_id: { type: mongoose.Schema.Types.ObjectId },
   created_by_name: { type: String },
+
+  status_updated_by: [
+  {
+    id: { type: mongoose.Schema.Types.ObjectId, required: true },
+    name: { type: String, required: true },
+    role: { type: String, required: true },
+    updated_at: { type: Date, default: Date.now }
+  }
+],
 
 }, { timestamps: true });
 

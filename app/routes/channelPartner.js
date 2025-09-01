@@ -2,7 +2,7 @@
 import express from "express";
 import { channelPartner } from "../controllers/channelPartner.js";
 import { verifyToken } from "../middlewares/jwtAuth.js";
-import { upload,uploadMultipleToCloudinary } from "../middlewares/multer.js";
+import { upload,uploadFilesToCloudinary } from "../middlewares/multer.js";
 
 const router = express.Router();
 
