@@ -5,7 +5,7 @@ import { handleResponse } from "../utils/helper.js";
 import Lead from "../models/leads.js";
 import { createChannelPartnerValidator } from "../validators/channelPartner.js";
 import { signAccessToken } from "../middlewares/jwtAuth.js";
-import { uploadMultipleToCloudinary } from "../middlewares/multer.js";
+import { uploadFilesToCloudinary } from "../middlewares/multer.js";
 import mongoose from 'mongoose';
 
 const createChannelPartner = async (req, res) => {
@@ -34,7 +34,7 @@ const createChannelPartner = async (req, res) => {
     };
 
     const { profile_photo: profilePhotoUrl, id_proof: idProofUrl } =
-      await uploadMultipleToCloudinary(filesToUpload);
+      await uploadFilesToCloudinary(filesToUpload);
 
     if (!profilePhotoUrl || !idProofUrl) {
       return handleResponse(res, 400, "Profile photo and ID proof are required");
@@ -98,7 +98,9 @@ const loginChannelPartner = async (req, res) => {
       }
 
       const token = await signAccessToken(partner._id, "channel_partner", partner.email);
-      return handleResponse(res, 200, "Login successful", { token });
+      return handleResponse(res, 200, "Login successful", {
+        name: partner.name,
+        token });
     }
 
     // Option 2: Mobile number + OTP login
@@ -166,7 +168,7 @@ const getAllChannelPartners = async (req, res) => {
       return handleResponse(res, 403, "Access denied. Admins only.");
     }
 
-    const { q = "", status, page = 1, perPage = 10 } = req.query; 
+    const { q = "", status, page = 1, perPage = 100 } = req.query; 
 
     const matchStage = {
       agent_type: "channel_partner",
