@@ -22,5 +22,6 @@ router.patch("/admin/:id", verifyToken, leads.updateLeadStatusByAdmin);
 router.patch("/agent/:id", verifyToken, leads.updateLeadStatusByAgent);
 router.patch("/channel-partner/:id", verifyToken, leads.updateLeadStatusByChannelPartner);
 
+router.get("/admin/:agentId", verifyToken, leads.getLeadDetailsByAgentId);
 
 export default router;

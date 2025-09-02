@@ -7,7 +7,7 @@ const LeadSchema = new mongoose.Schema({
   phone_number: { type: String, required: true },
   interested_in: { type: String, required: true },
   source: { type: String, required: true },
-  date: { type: String, required: true },
+  // date: { type: String, required: true },
   status: { type: String, default: "new" },
 
   address: { type: String },
@@ -15,6 +15,7 @@ const LeadSchema = new mongoose.Schema({
   requirement_type: { type: String },
   budget: { type: String },
   remark: { type: String },
+  location: {type: String },
 
   assigned_to: { type: mongoose.Types.ObjectId, refPath: "assigned_to_model" },
   assigned_to_name: { type: String },
@@ -29,6 +30,7 @@ const LeadSchema = new mongoose.Schema({
     id: { type: mongoose.Schema.Types.ObjectId, required: true },
     name: { type: String, required: true },
     role: { type: String, required: true },
+    status: { type: String },
     updated_at: { type: Date, default: Date.now }
   }
 ],
