@@ -16,6 +16,8 @@ router.post("/login", agent.loginAgent);
 
 router.get("/", verifyToken, agent.getAllAgents);
 
+router.get("/channel-partner", verifyToken, agent.getAllAgentsForChannelPartner);
+
 router.get("/agent/:id", verifyToken, agent.getAgentById);
 
 router.delete("/:id", verifyToken, agent.deleteAgentById);

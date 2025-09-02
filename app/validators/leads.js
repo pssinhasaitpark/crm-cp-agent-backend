@@ -7,12 +7,12 @@ const baseSchema = {
   phone_number: Joi.string().min(10).max(15).required(),
   interested_in: Joi.string().required(),
   source: Joi.string().required(),
-  date: Joi.string()
-    .pattern(/^\d{2}\/\d{2}\/\d{4}$/)
-    .required()
-    .messages({
-      "string.pattern.base": "Date must be in DD/MM/YYYY format",
-    }),
+  // date: Joi.string()
+  //   .pattern(/^\d{2}\/\d{2}\/\d{4}$/)
+  //   .required()
+  //   .messages({
+  //     "string.pattern.base": "Date must be in DD/MM/YYYY format",
+  //   }),
 };
 
 const extraFieldsSchema = {
@@ -21,6 +21,7 @@ const extraFieldsSchema = {
   requirement_type: Joi.string().required(),
   budget: Joi.string().required(),
   remark: Joi.string().required(),
+  location: Joi.string().required(),
 };
 
 export const getLeadValidationSchema = (userRole) => {
@@ -41,3 +42,8 @@ export const getLeadValidationSchema = (userRole) => {
     return Joi.object(baseSchema);
   }
 };
+
+export const updateLeadSchema = Joi.object({
+  status: Joi.string().optional(),
+  assigned_to: Joi.string().optional(),
+}).unknown(false); // ❌ Disallow unknown fields like "assignTo"

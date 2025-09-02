@@ -1,6 +1,7 @@
 //app/controllers/channelPartner.js
 import bcrypt from "bcryptjs";
 import ChannelPartner from "../models/channelPartner.js";
+import Agent from "../models/agent.js";
 import { handleResponse } from "../utils/helper.js";
 import Lead from "../models/leads.js";
 import { createChannelPartnerValidator } from "../validators/channelPartner.js";
@@ -25,7 +26,12 @@ const createChannelPartner = async (req, res) => {
 
     const existingPartner = await ChannelPartner.findOne({ email: req.body.email });
     if (existingPartner) {
-      return handleResponse(res, 409, "Email already registered");
+      return handleResponse(res, 409, "Email already registered.");
+    }
+
+    const existingAgent = await Agent.findOne({ email: req.body.email });
+    if (existingAgent) {
+      return handleResponse(res, 409, "Email already registered.");
     }
 
     const filesToUpload = {
@@ -58,6 +64,7 @@ const createChannelPartner = async (req, res) => {
 
     return handleResponse(res, 201, isAdmin ? "Channel Partner created by admin successfully" : "Channel Partner registered successfully. Awaiting admin approval.",  partnerData );
   } catch (error) {
+    console.log("Error Creating Channel-Partner", error)
     return handleResponse(res, 500, "Internal Server Error", {
       error: error.message,
     });
@@ -100,6 +107,8 @@ const loginChannelPartner = async (req, res) => {
       const token = await signAccessToken(partner._id, "channel_partner", partner.email);
       return handleResponse(res, 200, "Login successful", {
         name: partner.name,
+        role: partner.agent_type,
+        firm_name: partner.firm_name,
         token });
     }
 

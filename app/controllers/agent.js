@@ -1,6 +1,7 @@
 // app/controllers/agent.js
 import bcrypt from "bcryptjs";
 import Agent from "../models/agent.js";
+import ChannelPartner from "../models/channelPartner.js";
 import { handleResponse } from "../utils/helper.js";
 import { createAgentValidator } from "../validators/agent.js";
 import { uploadFilesToCloudinary } from "../middlewares/multer.js";
@@ -11,7 +12,7 @@ const createAgent = async (req, res) => {
   try {
     let isAdmin = req.user && req.user.user_role === "admin";
 
-   const { error } = createAgentValidator.validate(req.body, { abortEarly: false });
+    const { error } = createAgentValidator.validate(req.body, { abortEarly: false });
 
     if (error) {
       const messages = error.details.map((err) => err.message.replace(/"/g, ""));
@@ -22,7 +23,12 @@ const createAgent = async (req, res) => {
 
     const existingAgent = await Agent.findOne({ email: req.body.email });
     if (existingAgent) {
-      return handleResponse(res, 409, "Email already registered");
+      return handleResponse(res, 409, "Email already registered.");
+    }
+
+    const existingChannelPartner = await ChannelPartner.findOne({ email: req.body.email });
+    if (existingChannelPartner) {
+      return handleResponse(res, 409, "Email already registered.");
     }
 
     const filesToUpload = {
@@ -177,25 +183,25 @@ const getAllAgents = async (req, res) => {
               }
             }
           ],
-          as: "direct_leads",
+          as: "lead_details",
         },
       },
       {
         $addFields: {
-          leads_count: { $size: "$direct_leads" }
+          leads_count: { $size: "$lead_details" }
         }
       },
       {
         $project: {
           password: 0,
           refreshToken: 0,
-          direct_leads: 0,
+          // direct_leads: 0,
           __v: 0,
         },
       },
       { $sort: { createdAt: -1 } },
-      { $skip: skip }, 
-      { $limit: Number(perPage) }, 
+      { $skip: skip },
+      { $limit: Number(perPage) },
     ];
 
     const agents = await Agent.aggregate(pipeline);
@@ -209,10 +215,103 @@ const getAllAgents = async (req, res) => {
       totalItems,
       currentPage: Number(page),
       totalPages,
-      totalItemsOnCurrentPage: agents.length, 
+      totalItemsOnCurrentPage: agents.length,
     });
   } catch (error) {
     console.error("Error fetching agents:", error);
+    return handleResponse(res, 500, "Internal Server Error");
+  }
+};
+
+const getAllAgentsForChannelPartner = async (req, res) => {
+  try {
+    if (!req.user || req.user.user_role !== "channel_partner") {
+      return handleResponse(res, 403, "Access denied. Channel partners only.");
+    }
+
+    const { q = "", status, page = 1, perPage = 100 } = req.query;
+
+    const matchStage = {
+      agent_type: "agent",
+      deleted: { $ne: true },
+      createdBy: req.user._id,
+    };
+
+    if (status) {
+      matchStage.status = status.toLowerCase();
+    }
+
+    if (q) {
+      const regex = new RegExp(q, "i");
+
+      if (q.toLowerCase() === "active" || q.toLowerCase() === "inactive") {
+        matchStage.status = q.toLowerCase();
+      } else {
+        matchStage.$or = [
+          { name: regex },
+          { email: regex },
+          { mobile_number: regex },
+          { firm_name: regex },
+          { state: regex },
+        ];
+      }
+    }
+
+    const skip = (page - 1) * perPage;
+
+    const pipeline = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: "leads",
+          let: { agentId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$assigned_to", "$$agentId"] },
+                    { $eq: ["$assigned_to_model", "Agent"] },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "direct_leads",
+        },
+      },
+      {
+        $addFields: {
+          leads_count: { $size: "$direct_leads" },
+        },
+      },
+      {
+        $project: {
+          password: 0,
+          refreshToken: 0,
+          direct_leads: 0,
+          __v: 0,
+        },
+      },
+      { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: Number(perPage) },
+    ];
+
+    const agents = await Agent.aggregate(pipeline);
+
+    const totalItems = await Agent.countDocuments(matchStage);
+    const totalPages = Math.ceil(totalItems / perPage);
+
+    return handleResponse(res, 200, "Agents fetched successfully", {
+      results: agents,
+      totalItems,
+      currentPage: Number(page),
+      totalPages,
+      totalItemsOnCurrentPage: agents.length,
+    });
+  } catch (error) {
+    console.error("Error fetching agents for channel partner:", error);
     return handleResponse(res, 500, "Internal Server Error");
   }
 };
@@ -275,6 +374,7 @@ export const agent = {
   createAgent,
   loginAgent,
   getAllAgents,
+  getAllAgentsForChannelPartner,
   getAgentById,
   deleteAgentById
 };

@@ -11,7 +11,12 @@ const createCustomer = async (req, res) => {
 
     const schema = getCustomerValidationSchema(user_role);
     const { error } = schema.validate(req.body);
-    if (error) return handleResponse(res, 400, error.details[0].message);
+    // if (error) return handleResponse(res, 400, error.details[0].message);
+    if (error) {
+      const rawMessage = error.details[0].message;
+      const cleanedMessage = rawMessage.replace(/\"/g, "");
+      return handleResponse(res, 400, cleanedMessage);
+    }
 
     const existingCustomer = await Customer.findOne({ email: req.body.email });
     if (existingCustomer) return handleResponse(res, 409, "A customer with this email already exists.");
@@ -88,8 +93,12 @@ const getAllCustomersForAdmin = async (req, res) => {
     }
 
     const customers = await Customer.find().sort({ createdAt: -1 });
+    const total_customers = customers.length;
 
-    return handleResponse(res, 200, "All customers fetched successfully", { results: customers });
+    return handleResponse(res, 200, "All customers fetched successfully", {
+      results: customers,
+      total_customers
+    });
   } catch (err) {
     console.error("Error fetching customers for admin:", err);
     return handleResponse(res, 500, "Internal Server Error");
@@ -104,12 +113,21 @@ const getAllCustomersForChannelPartner = async (req, res) => {
       return handleResponse(res, 403, "Access denied: Only channel partners can access their assigned customers.");
     }
 
+    // const customers = await Customer.find({
+    //   assigned_to: userId,
+    //   assigned_to_model: "ChannelPartner",
+    // }).sort({ createdAt: -1 });
     const customers = await Customer.find({
-      assigned_to: userId,
-      assigned_to_model: "ChannelPartner",
+      created_by_id: userId,
     }).sort({ createdAt: -1 });
 
-    return handleResponse(res, 200, "Assigned customers fetched successfully", { results : customers });
+
+    const total_customers = customers.length;
+
+    return handleResponse(res, 200, "Assigned customers fetched successfully", {
+      results: customers,
+      total_customers
+    });
   } catch (err) {
     console.error("Error fetching customers for channel partner:", err);
     return handleResponse(res, 500, "Internal Server Error");
@@ -129,16 +147,21 @@ const getAllCustomersForAgent = async (req, res) => {
       assigned_to_model: "Agent",
     }).sort({ createdAt: -1 });
 
-    return handleResponse(res, 200, "Assigned customers fetched successfully", { results : customers });
+    const total_customers = customers.length;
+
+    return handleResponse(res, 200, "Assigned customers fetched successfully", {
+      results: customers,
+      total_customers
+    });
   } catch (err) {
     console.error("Error fetching customers for agent:", err);
     return handleResponse(res, 500, "Internal Server Error");
   }
 };
 
-export const customers = { 
-    createCustomer,
-    getAllCustomersForAdmin,
-    getAllCustomersForChannelPartner,
-    getAllCustomersForAgent
- };
+export const customers = {
+  createCustomer,
+  getAllCustomersForAdmin,
+  getAllCustomersForChannelPartner,
+  getAllCustomersForAgent
+};
