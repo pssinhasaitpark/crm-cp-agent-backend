@@ -146,7 +146,7 @@ export const verifyToken = async (req, res, next) => {
       email,
       username: user.username || user.name || null, // fallback to name if username missing
       mobile_number: user.mobile_number || null,
-      agent_type: user.agent_type || null, // agent_type is only relevant for agents/channel partners
+      role: user.role || null, // role is only relevant for agents/channel partners
     };
 
     next();

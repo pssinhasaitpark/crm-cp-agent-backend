@@ -9,7 +9,7 @@ const masterStatusSchema = new mongoose.Schema(
         deleted: { type: Boolean, default: false },
         deletedAt: { type: Date, default: null }
     },
-    {timestamps: true}
+    { timestamps: true }
 )
 
 export default mongoose.model("MasterStatus", masterStatusSchema);

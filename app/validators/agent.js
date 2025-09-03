@@ -33,5 +33,14 @@ export const createAgentValidator = Joi.object({
     "number.base": "Year of experience must be a number",
     "any.required": "Year of experience is required",
   }),
+
+  agent_type: Joi.string()
+    .valid("in_house", "external")
+    .required()
+    .messages({
+      "string.empty": "Agent type is required",
+      "any.only": "Agent type must be either 'in_house' or 'external'",
+    }),
+
   referral_code: Joi.string().optional(),
 });

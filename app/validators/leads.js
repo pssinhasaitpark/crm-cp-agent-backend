@@ -5,7 +5,11 @@ const baseSchema = {
   name: Joi.string().required(),
   email: Joi.string().email().required(),
   phone_number: Joi.string().min(10).max(15).required(),
-  interested_in: Joi.string().required(),
+  // interested_in: Joi.string().required(),
+  interested_in: Joi.alternatives().try(
+    Joi.string().regex(/^[0-9a-fA-F]{24}$/), // valid ObjectId
+    Joi.string().min(3)                      // custom text
+  ).required(),
   source: Joi.string().required(),
   // date: Joi.string()
   //   .pattern(/^\d{2}\/\d{2}\/\d{4}$/)

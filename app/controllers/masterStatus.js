@@ -41,7 +41,7 @@ const getAllMasterStatus = async (req, res) => {
     try {
         const masterStatuses = await MasterStatus.find({ deleted: false }).select("name description deleted");
 
-        return handleResponse(res, 200, "Master Statuses fetched successfully", {results: masterStatuses});
+        return handleResponse(res, 200, "Master Statuses fetched successfully", { results: masterStatuses });
     } catch (error) {
         console.error("Error fetching master statuses:", error);
         return handleResponse(res, 500, "Internal Server Error");

@@ -49,7 +49,7 @@ const createAgent = async (req, res) => {
       password: hashedPassword,
       profile_photo: profilePhotoUrl,
       id_proof: idProofUrl,
-      agent_type: "agent",
+      role: "agent",
       status: isAdmin ? "active" : "inactive",
       createdBy: isAdmin ? req.user._id : null,
     };
@@ -140,7 +140,7 @@ const getAllAgents = async (req, res) => {
     const { q = "", status, page = 1, perPage = 100 } = req.query; // Extract page and perPage from query params
 
     const matchStage = {
-      agent_type: "agent",
+      role: "agent",
     };
 
     if (status) {
@@ -232,7 +232,7 @@ const getAllAgentsForChannelPartner = async (req, res) => {
     const { q = "", status, page = 1, perPage = 100 } = req.query;
 
     const matchStage = {
-      agent_type: "agent",
+      role: "agent",
       deleted: { $ne: true },
       createdBy: req.user._id,
     };
@@ -326,7 +326,7 @@ const getAgentById = async (req, res) => {
 
     const agent = await Agent.findById(id).select("-password -refreshToken -__v");
 
-    if (!agent || agent.agent_type !== "agent") {
+    if (!agent || agent.role !== "agent") {
       return handleResponse(res, 404, "Agent not found");
     }
 
@@ -350,7 +350,7 @@ const deleteAgentById = async (req, res) => {
     }
 
     const agent = await Agent.findById(id);
-    if (!agent || agent.agent_type !== "agent") {
+    if (!agent || agent.role !== "agent") {
       return handleResponse(res, 404, "Agent not found");
     }
 
