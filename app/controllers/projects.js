@@ -13,7 +13,7 @@ const createProjects = async (req, res) => {
     const { error } = projectValidation.validate(req.body);
     if (error) {
       const rawMessage = error.details[0].message;
-      const cleanedMessage = rawMessage.replace(/\"/g, ""); 
+      const cleanedMessage = rawMessage.replace(/\"/g, "");
       return handleResponse(res, 400, cleanedMessage);
     }
 

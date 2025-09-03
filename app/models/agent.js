@@ -14,7 +14,8 @@ const agentSchema = new mongoose.Schema(
     profile_photo: { type: String, required: true },
     id_proof: { type: String, required: true },
     referral_code: { type: String },
-    agent_type: { type: String, enum: ["agent", "channel_partner"], default: "agent" },
+    // agent_type: { type: String, enum: ["agent", "channel_partner"], default: "agent" },
+    role: { type: String, enum: ["agent", "channel_partner"], default: "agent" },
     status: {
       type: String,
       enum: ["active", "inactive"],

@@ -13,8 +13,8 @@ const createChannelPartner = async (req, res) => {
   try {
     let isAdmin = req.user && req.user.user_role === "admin";
 
-   const { error } = createChannelPartnerValidator.validate(req.body, {
-      abortEarly: false, 
+    const { error } = createChannelPartnerValidator.validate(req.body, {
+      abortEarly: false,
     });
 
     if (error) {
@@ -54,7 +54,7 @@ const createChannelPartner = async (req, res) => {
       password: hashedPassword,
       profile_photo: profilePhotoUrl,
       id_proof: idProofUrl,
-      agent_type: "channel_partner",
+      role: "channel_partner",
       status: isAdmin ? "active" : "inactive",
     });
 
@@ -62,7 +62,7 @@ const createChannelPartner = async (req, res) => {
     delete partnerData.password;
     delete partnerData.__v;
 
-    return handleResponse(res, 201, isAdmin ? "Channel Partner created by admin successfully" : "Channel Partner registered successfully. Awaiting admin approval.",  partnerData );
+    return handleResponse(res, 201, isAdmin ? "Channel Partner created by admin successfully" : "Channel Partner registered successfully. Awaiting admin approval.", partnerData);
   } catch (error) {
     console.log("Error Creating Channel-Partner", error)
     return handleResponse(res, 500, "Internal Server Error", {
@@ -107,9 +107,10 @@ const loginChannelPartner = async (req, res) => {
       const token = await signAccessToken(partner._id, "channel_partner", partner.email);
       return handleResponse(res, 200, "Login successful", {
         name: partner.name,
-        role: partner.agent_type,
+        role: partner.role,
         firm_name: partner.firm_name,
-        token });
+        token
+      });
     }
 
     // Option 2: Mobile number + OTP login
@@ -144,6 +145,8 @@ const loginChannelPartner = async (req, res) => {
   }
 };
 
+//leads_count issue only agent, not CP
+/*
 const getChannelPartnerLeadCount = async (channelPartnerId) => {
   const cpObjectId = new mongoose.Types.ObjectId(String(channelPartnerId));
 
@@ -170,6 +173,42 @@ const getChannelPartnerLeadCount = async (channelPartnerId) => {
 
   return result.length > 0 ? result[0].totalLeads : 0;
 };
+*/
+
+//here lead_count correct for CP
+const getChannelPartnerLeadCount = async (channelPartnerId) => {
+  const cpObjectId = new mongoose.Types.ObjectId(String(channelPartnerId));
+
+  const pipeline = [
+    {
+      $match: {
+        $or: [
+          // 1. Created by the CP
+          { created_by_id: cpObjectId },
+
+          // 2. Created by CP & assigned to agent (already covered, but redundant with above)
+          {
+            assigned_to_model: "Agent",
+            created_by_id: cpObjectId,
+          },
+
+          // ✅ 3. Assigned directly to the CP
+          {
+            assigned_to: cpObjectId,
+            assigned_to_model: "ChannelPartner",
+          },
+        ],
+      },
+    },
+    {
+      $count: "totalLeads",
+    },
+  ];
+
+  const result = await Lead.aggregate(pipeline);
+
+  return result.length > 0 ? result[0].totalLeads : 0;
+};
 
 const getAllChannelPartners = async (req, res) => {
   try {
@@ -177,10 +216,10 @@ const getAllChannelPartners = async (req, res) => {
       return handleResponse(res, 403, "Access denied. Admins only.");
     }
 
-    const { q = "", status, page = 1, perPage = 100 } = req.query; 
+    const { q = "", status, page = 1, perPage = 100 } = req.query;
 
     const matchStage = {
-      agent_type: "channel_partner",
+      role: "channel_partner",
     };
 
     if (status) {
@@ -199,7 +238,7 @@ const getAllChannelPartners = async (req, res) => {
           { mobile_number: regex },
           { firm_name: regex },
           { state: regex },
-          { agent_type: regex },
+          { role: regex },
         ];
       }
     }
@@ -208,8 +247,8 @@ const getAllChannelPartners = async (req, res) => {
 
     const partners = await ChannelPartner.find(matchStage)
       .sort({ createdAt: -1 })
-      .skip(skip) 
-      .limit(Number(perPage)) 
+      .skip(skip)
+      .limit(Number(perPage))
       .lean();
 
     const totalItems = await ChannelPartner.countDocuments(matchStage);
@@ -233,7 +272,7 @@ const getAllChannelPartners = async (req, res) => {
       totalItems,
       currentPage: Number(page),
       totalPages,
-      totalItemsOnCurrentPage,  
+      totalItemsOnCurrentPage,
     });
   } catch (error) {
     console.error("Error fetching channel partners:", error);
@@ -264,7 +303,7 @@ const getChannelPartnerById = async (req, res) => {
           mobile_number: 1,
           firm_name: 1,
           state: 1,
-          agent_type: 1,
+          role: 1,
           role: 1,
           deleted: 1,
           status: 1,
