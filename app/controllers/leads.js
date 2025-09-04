@@ -546,7 +546,7 @@ const getLeadById = async (req, res) => {
     return handleResponse(res, 500, "Internal Server Error");
   }
 };
-
+/*
 const updateLeadStatus = async ({ req, res, allowedRole }) => {
   try {
     const { id } = req.params;
@@ -652,6 +652,253 @@ const updateLeadStatus = async ({ req, res, allowedRole }) => {
     return handleResponse(res, 200, "Lead updated successfully", leadObj);
   } catch (err) {
     console.error("Error updating lead:", err);
+    return handleResponse(res, 500, "Internal Server Error");
+  }
+};
+*/
+
+// const updateLeadStatus = async ({ req, res, allowedRole, io }) => {
+const updateLeadStatus = async ({ req, res, allowedRole }) => {
+  const io = req.io;
+  try {
+    const { id } = req.params;
+    const { status, assigned_to, action } = req.body;
+    const { user_role, id: userId, username: userName } = req.user;
+
+    console.log("📥 Incoming request to update lead:", {
+      leadId: id,
+      status,
+      assigned_to,
+      action,
+      user_role,
+      userId,
+      userName,
+    });
+
+    // === Validate Body ===
+    const { error } = updateLeadSchema.validate(req.body);
+    if (error) {
+      const cleanMessage = error.message.replace(/\"/g, "");
+      return handleResponse(res, 400, `Invalid request body: ${cleanMessage}`);
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return handleResponse(res, 400, "Invalid lead ID");
+    }
+
+    const lead = await Lead.findById(id);
+    if (!lead) return handleResponse(res, 404, "Lead not found");
+
+    console.log("📄 Fetched lead from DB:", lead);
+
+    // === Role Restriction ===
+    if (user_role !== allowedRole) {
+      return handleResponse(res, 403, `Access Denied: Only ${allowedRole}s allowed`);
+    }
+
+    // === Agent Permissions ===
+    if (user_role === "agent") {
+      const isOwner = lead.created_by_id?.toString() === userId.toString();
+      const isAssigned = lead.assigned_to?.toString() === userId.toString();
+      const isBroadcasted = lead.is_broadcasted && Array.isArray(lead.broadcasted_to) && lead.broadcasted_to.map(id => id.toString()).includes(userId.toString());
+
+      if (!isOwner && !isAssigned && !isBroadcasted) {
+        return handleResponse(res, 403, "Access Denied: This lead is not yours");
+      }
+    }
+
+    // === Channel Partner Permissions ===
+    if (user_role === "channel_partner") {
+      const isCreator = lead.created_by_id?.toString() === userId.toString();
+      const isAssignedToCP = lead.assigned_to?.toString() === userId.toString();
+      const isAssignedByCP = lead.created_by === "channel_partner" && lead.created_by_id?.toString() === userId.toString();
+
+      if (!isCreator && !isAssignedToCP && !isAssignedByCP) {
+        return handleResponse(res, 403, "Access Denied: This lead does not belong to you");
+      }
+    }
+
+    // === Handle Broadcast Accept/Decline ===
+    if (lead.is_broadcasted && Array.isArray(lead.broadcasted_to) && lead.broadcasted_to.map(id => id.toString()).includes(userId.toString())) {
+      console.log("📡 Broadcast accept/decline path triggered");
+
+      if (!action) return handleResponse(res, 400, "Action is required for broadcasted lead (accept/decline)");
+
+      if (action === "accept") {
+        if (lead.lead_accepted_by) {
+          return handleResponse(res, 409, `Lead already accepted by ${lead.lead_accepted_by_name}`);
+        }
+
+        console.log("✅ Lead is being accepted");
+
+        const broadcastedAgents = lead.broadcasted_to.filter(agentId => agentId && typeof agentId.toString === "function");
+
+        lead.lead_accepted_by = userId;
+        lead.lead_accepted_by_name = userName;
+        lead.lead_accepted_by_model = user_role === "agent" ? "Agent" : "ChannelPartner";
+
+        lead.assigned_to = userId;
+        lead.assigned_to_model = user_role === "agent" ? "Agent" : "ChannelPartner";
+        lead.assigned_to_name = userName;
+
+        lead.is_broadcasted = false;
+        lead.broadcasted_to = [];
+
+        await lead.save();
+
+        // Notify other agents
+        broadcastedAgents.forEach(agentId => {
+          if (!agentId || typeof agentId.toString !== "function") return;
+
+          const agentIdStr = agentId.toString();
+          if (agentIdStr !== userId.toString()) {
+            console.log(`📣 Notifying agent ${agentIdStr} about lead acceptance`);
+            io.to(agentIdStr).emit("lead_accepted", {
+              leadId: lead._id,
+              message: `Lead accepted by ${userName}`,
+            });
+          }
+        });
+
+        // ✅ Notify admins
+        console.log(`🔔 Notifying admins about lead acceptance by ${userName} (${user_role})`);
+        io.to("admins").emit("lead_accepted", {
+          leadId: lead._id,
+          acceptedBy: {
+            id: userId,
+            name: userName,
+            role: user_role,
+          },
+          message: `Lead accepted by ${userName} (${user_role})`,
+        });
+
+
+        return handleResponse(res, 200, "Lead accepted successfully", lead);
+      }
+
+      if (action === "decline") {
+        console.log(`🚫 Lead declined by ${userId}`);
+        return handleResponse(res, 200, "Lead declined successfully");
+      }
+
+      return handleResponse(res, 400, "Invalid action. Use 'accept' or 'decline'");
+    }
+
+    // === Update Status ===
+    if (status) {
+      if (!mongoose.Types.ObjectId.isValid(status)) {
+        return handleResponse(res, 400, "Invalid status ID");
+      }
+
+      const masterStatus = await MasterStatus.findOne({ _id: status, deleted: false });
+      if (!masterStatus) return handleResponse(res, 404, "Master status not found");
+
+      console.log("🔄 Updating lead status to:", masterStatus.name);
+
+      lead.status = masterStatus.name.toLowerCase();
+      lead.master_status_id = masterStatus._id;
+
+      lead.status_updated_by.push({
+        id: userId,
+        name: userName,
+        role: user_role,
+        updated_at: new Date(),
+        status: masterStatus.name.toLowerCase(),
+      });
+    }
+
+    // === Assign to Agent/CP or Broadcast ===
+    if (assigned_to) {
+      if (assigned_to === "all") {
+        console.log("📢 Broadcasting lead to all active agents");
+
+        const allAgents = await Agent.find({ deleted: false, status: "active" });
+        if (!allAgents.length) return handleResponse(res, 404, "No active agents found for broadcast");
+
+        const agentIds = allAgents
+          .filter(agent => agent && agent._id)
+          .map(agent => agent._id);
+
+        console.log("🧑‍🤝‍🧑 Active agent IDs:", agentIds.map(id => id.toString()));
+
+        lead.is_broadcasted = true;
+        lead.broadcasted_to = agentIds;
+        lead.assigned_to = null;
+        lead.assigned_to_model = null;
+        lead.assigned_to_name = null;
+        lead.lead_accepted_by = null;
+        lead.lead_accepted_by_name = null;
+        lead.lead_accepted_by_model = null;
+
+        await lead.save();
+
+        allAgents.forEach(agent => {
+          if (!agent || !agent._id || typeof agent._id.toString !== "function") {
+            console.warn("⚠️ Invalid agent._id while emitting:", agent);
+            return;
+          }
+
+          const agentIdStr = agent._id.toString();
+          console.log(`📨 Emitting 'new_lead' to agent ${agentIdStr}`);
+
+          io.to(agentIdStr).emit("new_lead", {
+            leadId: lead._id,
+            message: "New lead available to accept",
+          });
+        });
+
+        return handleResponse(res, 200, "Lead broadcasted to all agents");
+      }
+
+      // Individual assignment
+      if (!mongoose.Types.ObjectId.isValid(assigned_to)) {
+        return handleResponse(res, 400, "Invalid assigned_to ID");
+      }
+
+      let assignedUser = await Agent.findOne({ _id: assigned_to, deleted: false });
+
+      if (assignedUser) {
+        console.log("👤 Assigning lead to agent:", assignedUser.name);
+        lead.assigned_to = assigned_to;
+        lead.assigned_to_model = "Agent";
+        lead.assigned_to_name = assignedUser.name;
+      } else {
+        assignedUser = await ChannelPartner.findOne({ _id: assigned_to, deleted: false });
+
+        if (assignedUser) {
+          console.log("🤝 Assigning lead to channel partner:", assignedUser.name);
+          lead.assigned_to = assigned_to;
+          lead.assigned_to_model = "ChannelPartner";
+          lead.assigned_to_name = assignedUser.name;
+        } else {
+          return handleResponse(res, 404, "Assigned user not found in Agent or ChannelPartner");
+        }
+      }
+
+      lead.is_broadcasted = false;
+      lead.broadcasted_to = [];
+      lead.lead_accepted_by = null;
+      lead.lead_accepted_by_name = null;
+      lead.lead_accepted_by_model = null;
+    }
+
+    // === Final Save and Response ===
+    await lead.save();
+
+    const leadObj = lead.toObject();
+    leadObj.status_updated_by = leadObj.status_updated_by.map(entry => ({
+      id: entry.id,
+      name: entry.name,
+      role: entry.role,
+      updated_at: entry.updated_at,
+      status: entry.status,
+    }));
+
+    console.log("✅ Final updated lead object:", leadObj);
+
+    return handleResponse(res, 200, "Lead updated successfully", leadObj);
+  } catch (err) {
+    console.error("❌ Error updating lead:", err);
     return handleResponse(res, 500, "Internal Server Error");
   }
 };
@@ -774,6 +1021,104 @@ const getLeadDetailsByAgentId = async (req, res) => {
   }
 };
 
+const acceptLead = async (req, res) => {
+  try {
+    const io = req.io;
+
+    const { leadId } = req.params;
+    const agentId = req.user.id;
+    const agentName = req.user.username;
+
+    const lead = await Lead.findById(leadId);
+
+    if (!lead) {
+      return handleResponse(res, 404, "Lead not found");
+    }
+
+    if (lead.lead_accepted_by) {
+      return handleResponse(res, 400, `Lead already accepted by ${lead.lead_accepted_by_name}`);
+    }
+
+    if (!lead.is_broadcasted) {
+      return handleResponse(res, 403, "Lead is not broadcasted");
+    }
+
+    if (!lead.broadcasted_to.map(id => id.toString()).includes(agentId)) {
+      return handleResponse(res, 403, "You were not eligible for this lead");
+    }
+
+    lead.assigned_to = agentId;
+    lead.assigned_to_model = "Agent";
+    lead.assigned_to_name = agentName;
+    lead.lead_accepted_by = agentId;
+    lead.lead_accepted_by_name = agentName;
+    lead.is_broadcasted = false;
+
+    await lead.save();
+
+    console.log("first");
+    console.log("Broadcasted to:", lead.broadcasted_to);
+
+    if (Array.isArray(lead.broadcasted_to)) {
+      lead.broadcasted_to.forEach(otherId => {
+        if (!otherId) return;
+
+        const otherIdStr = otherId.toString();
+        const agentIdStr = agentId.toString();
+
+        if (otherIdStr !== agentIdStr) {
+          console.log(`Emitting to room: ${otherIdStr}`);
+          io.to(otherIdStr)?.emit("lead_taken", {
+            leadId,
+            accepted_by: agentName,
+            message: `Lead already accepted by ${agentName}`,
+          });
+        }
+      });
+    }
+
+
+    // ✅ Notify admins
+    console.log(`🔔 Notifying admins about lead acceptance by ${agentName} (agent)`);
+    io.to("admins").emit("lead_accepted", {
+      leadId: lead._id,
+      acceptedBy: {
+        id: agentId,
+        name: agentName,
+        role: "agent", // This acceptLead is only for agents
+      },
+      message: `Lead accepted by ${agentName} (agent)`,
+    });
+
+    return handleResponse(res, 200, "Lead accepted successfully", lead.toObject());
+
+  } catch (err) {
+    console.error(err);
+    return handleResponse(res, 500, "Internal server error");
+  }
+};
+
+const declineLead = async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const agentId = req.user.id;
+
+    const lead = await Lead.findById(leadId);
+
+    if (!lead || !lead.is_broadcasted) {
+      return handleResponse(res, 404, "Lead not found or not broadcasted");
+    }
+
+    lead.broadcasted_to = lead.broadcasted_to.filter(id => id.toString() !== agentId);
+    await lead.save();
+
+    return handleResponse(res, 200, "Lead declined");
+  } catch (err) {
+    console.error(err);
+    return handleResponse(res, 500, "Internal server error");
+  }
+};
+
 export const leads = {
   createLead,
   getLeadById,
@@ -785,4 +1130,6 @@ export const leads = {
   updateLeadStatusByAgent,
   updateLeadStatusByChannelPartner,
   getLeadDetailsByAgentId,
+  acceptLead,
+  declineLead
 };
