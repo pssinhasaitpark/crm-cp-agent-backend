@@ -86,19 +86,22 @@ const loginAgent = async (req, res) => {
         return handleResponse(res, 404, "Agent not found");
       }
 
-      // First verify password
       const isMatch = await bcrypt.compare(password, agent.password);
       if (!isMatch) {
         return handleResponse(res, 401, "Invalid email or password");
       }
 
-      // Then check if account is active
       if (agent.status !== "active") {
         return handleResponse(res, 403, "Your account has not been verified by the admin. Please wait for admin approval.");
       }
 
       const token = await signAccessToken(agent._id, "agent", agent.email);
-      return handleResponse(res, 200, "Login successful", { token });
+      return handleResponse(res, 200, "Login successful", {
+        name: agent.name,
+        role: agent.role,
+        firm_name: agent.firm_name, // only if this exists in the Agent model
+        token
+      });
     }
 
     // Option 2: Mobile number + OTP login
@@ -121,10 +124,16 @@ const loginAgent = async (req, res) => {
       }
 
       const token = await signAccessToken(agent._id, agent.role, agent.email);
-      return handleResponse(res, 200, "Login successful", { token });
+      return handleResponse(res, 200, "Login successful", {
+        name: agent.name,
+        role: agent.role,
+        firm_name: agent.firm_name, // only if this exists
+        token
+      });
     }
 
     return handleResponse(res, 400, "Invalid request, provide either email/password or mobile_number/OTP");
+
   } catch (error) {
     console.error("Error logging in agent:", error);
     return handleResponse(res, 500, "Internal Server Error");
