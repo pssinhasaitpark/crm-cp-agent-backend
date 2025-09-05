@@ -383,7 +383,8 @@ const getAllLeadsForAgent = async (req, res) => {
     let matchStage = {
       $or: [
         { created_by_id: new mongoose.Types.ObjectId(String(userId)) },
-        { assigned_to: new mongoose.Types.ObjectId(String(userId)) }
+        { assigned_to: new mongoose.Types.ObjectId(String(userId)) },
+        { declined_by: new mongoose.Types.ObjectId(String(userId)) }
       ]
     };
 
@@ -473,9 +474,15 @@ const getAllLeadsForAgent = async (req, res) => {
     // Add total count
     statusBreakdown.totalItems = leads.length;
 
+    const broadcastAcceptedCount = await Lead.countDocuments({
+      is_broadcasted: false,
+      lead_accepted_by: new mongoose.Types.ObjectId(String(userId)),
+    });
+
     return handleResponse(res, 200, "Leads fetched successfully", {
       results: leads,
       ...statusBreakdown,
+      broadcast_list_count: broadcastAcceptedCount,
     });
   } catch (error) {
     console.error("Error fetching leads:", error);
@@ -1109,6 +1116,10 @@ const declineLead = async (req, res) => {
       return handleResponse(res, 404, "Lead not found or not broadcasted");
     }
 
+    if (!lead.declined_by.includes(agentId)) {
+      lead.declined_by.push(agentId);
+    }
+
     lead.broadcasted_to = lead.broadcasted_to.filter(id => id.toString() !== agentId);
     await lead.save();
 
@@ -1116,6 +1127,118 @@ const declineLead = async (req, res) => {
   } catch (err) {
     console.error(err);
     return handleResponse(res, 500, "Internal server error");
+  }
+};
+
+const getAllBroadCastedLeads = async (req, res) => {
+  try {
+    const { q = "", status, page = 1, limit = 10 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    let matchStage = {
+      $and: [
+        {
+          $or: [
+            { is_broadcasted: true },
+            { broadcasted_to: { $exists: true, $not: { $size: 0 } } }
+          ]
+        }
+      ]
+    };
+
+    if (status) {
+      matchStage.$and.push({ status: status.toLowerCase() });
+    }
+
+    if (q) {
+      const regex = new RegExp(q, "i");
+      matchStage.$and.push({
+        $or: [
+          { name: regex },
+          { email: regex },
+          { phone_number: regex },
+          { interested_in: regex },
+          { source: regex },
+          { address: regex },
+          { property_type: regex },
+          { requirement_type: regex },
+          { budget: regex },
+          { remark: regex },
+          { assigned_to_name: regex },
+          { created_by_name: regex },
+        ]
+      });
+    }
+
+    const pipeline = [
+      { $match: matchStage },
+
+      {
+        $lookup: {
+          from: "projects",
+          localField: "interested_in",
+          foreignField: "_id",
+          as: "interested_project"
+        }
+      },
+      {
+        $addFields: {
+          interested_in_Id: {
+            $cond: [
+              { $gt: [{ $size: "$interested_project" }, 0] },
+              { $arrayElemAt: ["$interested_project._id", 0] },
+              null
+            ]
+          },
+          interested_in: {
+            $cond: [
+              { $gt: [{ $size: "$interested_project" }, 0] },
+              { $arrayElemAt: ["$interested_project.project_title", 0] },
+              "$interested_in"
+            ]
+          },
+          isAccepted: {
+            $cond: [
+              { $ne: ["$lead_accepted_by", null] },
+              true,
+              false
+            ]
+          }
+        }
+      },
+      {
+        $project: {
+          interested_project: 0,
+          __v: 0
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: parseInt(limit) }
+    ];
+
+    const countPipeline = [
+      { $match: matchStage },
+      { $count: "totalItems" }
+    ];
+
+    const [leads, countResult] = await Promise.all([
+      Lead.aggregate(pipeline),
+      Lead.aggregate(countPipeline)
+    ]);
+
+    const totalItems = countResult[0]?.totalItems || 0;
+
+    return handleResponse(res, 200, "Broadcasted leads fetched successfully", {
+      results: leads,
+      totalItems,
+      currentPage: parseInt(page),
+      totalPages: Math.ceil(totalItems / limit),
+    });
+
+  } catch (error) {
+    console.error("❌ Error fetching broadcasted leads:", error);
+    return handleResponse(res, 500, "Internal Server Error");
   }
 };
 
@@ -1131,5 +1254,6 @@ export const leads = {
   updateLeadStatusByChannelPartner,
   getLeadDetailsByAgentId,
   acceptLead,
-  declineLead
+  declineLead,
+  getAllBroadCastedLeads
 };
