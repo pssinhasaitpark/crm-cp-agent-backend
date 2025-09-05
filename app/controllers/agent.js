@@ -97,6 +97,7 @@ const loginAgent = async (req, res) => {
 
       const token = await signAccessToken(agent._id, "agent", agent.email);
       return handleResponse(res, 200, "Login successful", {
+        id: agent._id,
         name: agent.name,
         role: agent.role,
         firm_name: agent.firm_name, // only if this exists in the Agent model

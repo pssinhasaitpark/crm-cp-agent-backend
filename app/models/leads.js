@@ -40,7 +40,12 @@ const LeadSchema = new mongoose.Schema({
   broadcasted_to: [{ type: mongoose.Schema.Types.ObjectId, ref: "Agent" }],
   lead_accepted_by: { type: mongoose.Schema.Types.ObjectId, ref: "Agent", default: null },
   lead_accepted_by_name: { type: String },
-  
+
+  declined_by: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Agent"
+  }],
+
 }, { timestamps: true });
 
 export default mongoose.model("Lead", LeadSchema);

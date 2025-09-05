@@ -41,12 +41,13 @@ export default function (io) {
 
   router.post("/", verifyToken, leads.createLead);
 
+  router.get("/broadcasted", verifyToken, leads.getAllBroadCastedLeads);
+
   router.get("/admin", verifyToken, leads.getAllLeadsForAdmin);
   router.get("/channel-partner", verifyToken, leads.getAllLeadsForChannelPartner);
   router.get("/agent", verifyToken, leads.getAllLeadsForAgent);
   router.get("/:id", verifyToken, leads.getLeadById);
 
-  // 🧼 REFACTORED PATCH ROUTES
   router.patch("/:id", verifyToken, leads.updateLeadStatusByAgent);
   router.patch("/admin/:id", verifyToken, leads.updateLeadStatusByAdmin);
   router.patch("/agent/:id", verifyToken, leads.updateLeadStatusByAgent);
@@ -56,6 +57,8 @@ export default function (io) {
 
   router.post("/accept/:leadId", verifyToken, leads.acceptLead);
   router.post("/decline/:leadId", verifyToken, leads.declineLead);
+
+
 
   return router;
 }
