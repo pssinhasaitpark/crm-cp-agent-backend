@@ -37,9 +37,11 @@ const LeadSchema = new mongoose.Schema({
   ],
 
   is_broadcasted: { type: Boolean, default: false },
+  broadcasted_at: { type: Date, default: null },
   broadcasted_to: [{ type: mongoose.Schema.Types.ObjectId, ref: "Agent" }],
   lead_accepted_by: { type: mongoose.Schema.Types.ObjectId, ref: "Agent", default: null },
   lead_accepted_by_name: { type: String },
+  lead_accepted_at: { type: Date, default: null },
 
   declined_by: [{
     type: mongoose.Schema.Types.ObjectId,
