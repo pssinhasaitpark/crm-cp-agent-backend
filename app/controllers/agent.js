@@ -177,25 +177,55 @@ const getAllAgents = async (req, res) => {
 
     const pipeline = [
       { $match: matchStage },
+      // {
+      //   $lookup: {
+      //     from: "leads",
+      //     let: { agentId: "$_id" },
+      //     pipeline: [
+      //       {
+      //         $match: {
+      //           $expr: {
+      //             $and: [
+      //               { $eq: ["$assigned_to", "$$agentId"] },
+      //               { $eq: ["$assigned_to_model", "Agent"] }
+      //             ]
+      //           }
+      //         }
+      //       }
+      //     ],
+      //     as: "lead_details",
+      //   },
+      // },
       {
-        $lookup: {
-          from: "leads",
-          let: { agentId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$assigned_to", "$$agentId"] },
-                    { $eq: ["$assigned_to_model", "Agent"] }
-                  ]
-                }
+  $lookup: {
+    from: "leads",
+    let: { agentId: "$_id" },
+    pipeline: [
+      {
+        $match: {
+          $expr: {
+            $or: [
+              {
+                $and: [
+                  { $eq: ["$assigned_to", "$$agentId"] },
+                  { $eq: ["$assigned_to_model", "Agent"] }
+                ]
+              },
+              {
+                $and: [
+                  { $eq: ["$created_by", "agent"] },
+                  { $eq: ["$created_by_id", "$$agentId"] }
+                ]
               }
-            }
-          ],
-          as: "lead_details",
-        },
-      },
+            ]
+          }
+        }
+      }
+    ],
+    as: "lead_details",
+  },
+},
+
       {
         $addFields: {
           leads_count: { $size: "$lead_details" }

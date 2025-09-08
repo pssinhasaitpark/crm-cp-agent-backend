@@ -371,6 +371,7 @@ const getAllLeadsForChannelPartner = async (req, res) => {
   }
 };
 
+/*
 const getAllLeadsForAgent = async (req, res) => {
   try {
     const { user_role, id: userId } = req.user;
@@ -380,11 +381,29 @@ const getAllLeadsForAgent = async (req, res) => {
       return handleResponse(res, 403, "Access Denied: Agent only.");
     }
 
+    // let matchStage = {
+    //   $or: [
+    //     { created_by_id: new mongoose.Types.ObjectId(String(userId)) },
+    //     { assigned_to: new mongoose.Types.ObjectId(String(userId)) },
+    //     { declined_by: new mongoose.Types.ObjectId(String(userId)) }
+    //   ]
+    // };
     let matchStage = {
-      $or: [
-        { created_by_id: new mongoose.Types.ObjectId(String(userId)) },
-        { assigned_to: new mongoose.Types.ObjectId(String(userId)) },
-        { declined_by: new mongoose.Types.ObjectId(String(userId)) }
+      $and: [
+        {
+          $or: [
+            { created_by_id: new mongoose.Types.ObjectId(String(userId)) },
+            { assigned_to: new mongoose.Types.ObjectId(String(userId)) },
+            { declined_by: new mongoose.Types.ObjectId(String(userId)) }
+          ]
+        },
+        {
+          // Exclude leads that are broadcasted and not accepted by this agent
+          $or: [
+            { is_broadcasted: { $ne: true } },
+            { lead_accepted_by: new mongoose.Types.ObjectId(String(userId)) }
+          ]
+        }
       ]
     };
 
@@ -472,6 +491,135 @@ const getAllLeadsForAgent = async (req, res) => {
     });
 
     // Add total count
+    statusBreakdown.totalItems = leads.length;
+
+    const broadcastAcceptedCount = await Lead.countDocuments({
+      is_broadcasted: false,
+      lead_accepted_by: new mongoose.Types.ObjectId(String(userId)),
+    });
+
+    return handleResponse(res, 200, "Leads fetched successfully", {
+      results: leads,
+      ...statusBreakdown,
+      broadcast_list_count: broadcastAcceptedCount,
+    });
+  } catch (error) {
+    console.error("Error fetching leads:", error);
+    return handleResponse(res, 500, "Internal Server Error");
+  }
+};
+*/
+
+const getAllLeadsForAgent = async (req, res) => {
+  try {
+    const { user_role, id: userId } = req.user;
+    const { q = "", status } = req.query;
+
+    if (user_role !== "agent") {
+      return handleResponse(res, 403, "Access Denied: Agent only.");
+    }
+
+    let matchStage = {
+      $and: [
+        {
+          $or: [
+            { created_by_id: new mongoose.Types.ObjectId(String(userId)) },
+            { assigned_to: new mongoose.Types.ObjectId(String(userId)) },
+            { declined_by: new mongoose.Types.ObjectId(String(userId)) }
+          ]
+        },
+        {
+          // Exclude leads that are broadcasted and not accepted by this agent
+          $or: [
+            { is_broadcasted: { $ne: true } },
+            { lead_accepted_by: new mongoose.Types.ObjectId(String(userId)) }
+          ]
+        }
+      ]
+    };
+
+    if (status) {
+      matchStage.status = status.toLowerCase();
+    }
+
+    if (q) {
+      const regex = new RegExp(q, "i");
+
+      matchStage.$and.push({
+        $or: [
+          { name: regex },
+          { email: regex },
+          { phone_number: regex },
+          { interested_in: regex },
+          { source: regex },
+          { address: regex },
+          { property_type: regex },
+          { requirement_type: regex },
+          { budget: regex },
+          { remark: regex },
+          { assigned_to_name: regex },
+          { created_by_name: regex },
+        ]
+      });
+    }
+
+    const pipeline = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: "agents",
+          localField: "assigned_to",
+          foreignField: "_id",
+          as: "assigned_agent",
+        }
+      },
+      {
+        $lookup: {
+          from: "channelpartners",
+          localField: "assigned_to",
+          foreignField: "_id",
+          as: "assigned_channel_partner",
+        }
+      },
+      {
+        $addFields: {
+          assigned_to_full_details: {
+            $cond: [
+              { $eq: ["$assigned_to_model", "Agent"] },
+              { $arrayElemAt: ["$assigned_agent", 0] },
+              { $arrayElemAt: ["$assigned_channel_partner", 0] },
+            ],
+          },
+        }
+      },
+      {
+        $project: {
+          assigned_agent: 0,
+          assigned_channel_partner: 0,
+          __v: 0,
+        }
+      },
+      { $sort: { lead_accepted_at: -1, createdAt: -1 } },
+    ];
+
+    const leads = await Lead.aggregate(pipeline);
+
+    const masterStatuses = await MasterStatus.find({ deleted: false }).lean();
+
+    const statusCounts = leads.reduce((acc, lead) => {
+      const status = lead.status?.toLowerCase();
+      if (status) {
+        acc[status] = (acc[status] || 0) + 1;
+      }
+      return acc;
+    }, {});
+
+    const statusBreakdown = {};
+    masterStatuses.forEach((statusDoc) => {
+      const key = statusDoc.name.toLowerCase();
+      statusBreakdown[key] = statusCounts[key] || 0;
+    });
+
     statusBreakdown.totalItems = leads.length;
 
     const broadcastAcceptedCount = await Lead.countDocuments({
@@ -1059,11 +1207,11 @@ const acceptLead = async (req, res) => {
     lead.assigned_to_name = agentName;
     lead.lead_accepted_by = agentId;
     lead.lead_accepted_by_name = agentName;
+    lead.lead_accepted_at = new Date();
     lead.is_broadcasted = false;
 
     await lead.save();
 
-    console.log("first");
     console.log("Broadcasted to:", lead.broadcasted_to);
 
     if (Array.isArray(lead.broadcasted_to)) {
@@ -1107,8 +1255,10 @@ const acceptLead = async (req, res) => {
 
 const declineLead = async (req, res) => {
   try {
+    const io = req.io; // 🔥 Add this line
     const { leadId } = req.params;
     const agentId = req.user.id;
+    const agentName = req.user.username;
 
     const lead = await Lead.findById(leadId);
 
@@ -1122,6 +1272,17 @@ const declineLead = async (req, res) => {
 
     lead.broadcasted_to = lead.broadcasted_to.filter(id => id.toString() !== agentId);
     await lead.save();
+
+    // ✅ Optionally notify admins
+    io.to("admins").emit("lead_declined", {
+      leadId,
+      declinedBy: {
+        id: agentId,
+        name: agentName,
+        role: "agent", // or "channel_partner"
+      },
+      message: `Lead declined by ${agentName}`,
+    });
 
     return handleResponse(res, 200, "Lead declined");
   } catch (err) {
@@ -1241,6 +1402,130 @@ const getAllBroadCastedLeads = async (req, res) => {
     return handleResponse(res, 500, "Internal Server Error");
   }
 };
+
+/*
+const getAllBroadCastedLeads = async (req, res) => {
+  try {
+    const { q = "", status, page = 1, limit = 10 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    let matchStage = {
+      $and: [
+        {
+          $or: [
+            { is_broadcasted: true },
+            { broadcasted_to: { $exists: true, $not: { $size: 0 } } }
+          ]
+        }
+      ]
+    };
+
+    if (status) {
+      matchStage.$and.push({ status: status.toLowerCase() });
+    }
+
+    if (q) {
+      const regex = new RegExp(q, "i");
+      matchStage.$and.push({
+        $or: [
+          { name: regex },
+          { email: regex },
+          { phone_number: regex },
+          { interested_in: regex },
+          { source: regex },
+          { address: regex },
+          { property_type: regex },
+          { requirement_type: regex },
+          { budget: regex },
+          { remark: regex },
+          { assigned_to_name: regex },
+          { created_by_name: regex },
+        ]
+      });
+    }
+
+    const pipeline = [
+      { $match: matchStage },
+
+      // Lookup project info
+      {
+        $lookup: {
+          from: "projects",
+          localField: "interested_in",
+          foreignField: "_id",
+          as: "interested_project"
+        }
+      },
+      {
+        $addFields: {
+          interested_in_Id: {
+            $cond: [
+              { $gt: [{ $size: "$interested_project" }, 0] },
+              { $arrayElemAt: ["$interested_project._id", 0] },
+              null
+            ]
+          },
+          interested_in: {
+            $cond: [
+              { $gt: [{ $size: "$interested_project" }, 0] },
+              { $arrayElemAt: ["$interested_project.project_title", 0] },
+              "$interested_in"
+            ]
+          },
+          isAccepted: {
+            $cond: [
+              { $ne: ["$lead_accepted_by", null] },
+              true,
+              false
+            ]
+          }
+        }
+      },
+      {
+        $project: {
+          interested_project: 0,
+          __v: 0
+        }
+      },
+
+      // Sort stage: first by accepted leads (true first), then by acceptance date desc,
+      // finally by createdAt desc for non-accepted leads
+      {
+        $sort: {
+          isAccepted: -1,
+          lead_accepted_at: -1,
+          createdAt: -1
+        }
+      },
+      { $skip: skip },
+      { $limit: parseInt(limit) }
+    ];
+
+    const countPipeline = [
+      { $match: matchStage },
+      { $count: "totalItems" }
+    ];
+
+    const [leads, countResult] = await Promise.all([
+      Lead.aggregate(pipeline),
+      Lead.aggregate(countPipeline)
+    ]);
+
+    const totalItems = countResult[0]?.totalItems || 0;
+
+    return handleResponse(res, 200, "Broadcasted leads fetched successfully", {
+      results: leads,
+      totalItems,
+      currentPage: parseInt(page),
+      totalPages: Math.ceil(totalItems / limit),
+    });
+
+  } catch (error) {
+    console.error("❌ Error fetching broadcasted leads:", error);
+    return handleResponse(res, 500, "Internal Server Error");
+  }
+};
+*/
 
 export const leads = {
   createLead,
