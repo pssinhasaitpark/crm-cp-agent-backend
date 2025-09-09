@@ -52,7 +52,6 @@ const createAdmin = async (req, res) => {
 
 const loginAdmin = async (req, res) => {
   try {
-    // ✅ Validate input with Joi (collect all errors)
     const { error } = loginValidators.validate(req.body, { abortEarly: false });
     if (error) {
       const messages = error.details.map((err) => err.message);

@@ -20,13 +20,11 @@ const createLead = async (req, res) => {
       return handleResponse(res, 400, cleanedMessage);
     }
 
-    // Check if lead with email already exists
     const existingLead = await Lead.findOne({ email: req.body.email });
     if (existingLead) {
       return handleResponse(res, 409, "A lead with this email already exists.");
     }
 
-    // ✅ Step: Validate & format interested_in field
     let finalInterestedIn = req.body.interested_in;
 
     if (mongoose.Types.ObjectId.isValid(finalInterestedIn)) {
@@ -35,16 +33,15 @@ const createLead = async (req, res) => {
         return handleResponse(res, 400, "Invalid project ID provided in interested_in field.");
       }
 
-      finalInterestedIn = new mongoose.Types.ObjectId(finalInterestedIn); // clean ObjectId
+      finalInterestedIn = new mongoose.Types.ObjectId(String(finalInterestedIn)); 
     } else {
       if (typeof finalInterestedIn !== "string" || finalInterestedIn.trim().length < 3) {
         return handleResponse(res, 400, "Please provide a valid project name in interested_in.");
       }
 
-      finalInterestedIn = finalInterestedIn.trim(); // use as custom text
+      finalInterestedIn = finalInterestedIn.trim(); 
     }
 
-    // Handle assignment logic
     let assignedToId = null;
     let assignedToName = null;
     let assignedToModel = null;
@@ -100,7 +97,6 @@ const createLead = async (req, res) => {
       return handleResponse(res, 403, "Access Denied: Only admin, channel partner, or agent can create leads.");
     }
 
-    // ✅ Prepare lead data
     const leadData = {
       ...req.body,
       interested_in: finalInterestedIn,
@@ -113,17 +109,14 @@ const createLead = async (req, res) => {
       created_by_name: userName,
     };
 
-    // Remove invalid assignment if agent tries to assign
     if (user_role === "agent" && req.body.assigned_to) {
       delete leadData.assigned_to;
     }
 
-    // Save lead
     const newLead = new Lead(leadData);
     await newLead.save();
 
     // return handleResponse(res, 201, "Lead created successfully", newLead.toObject());
-    // Build custom response with readable interested_in
     const leadObj = newLead.toObject();
 
     if (mongoose.Types.ObjectId.isValid(leadObj.interested_in)) {
@@ -156,7 +149,6 @@ const getAllLeadsForAdmin = async (req, res) => {
       return handleResponse(res, 403, "Access Denied: Admin only.");
     }
 
-    // Build match filter
     let matchStage = {};
 
     if (status) {
@@ -181,11 +173,9 @@ const getAllLeadsForAdmin = async (req, res) => {
       ];
     }
 
-    // Aggregation pipeline
     const pipeline = [
       { $match: matchStage },
 
-      // ✅ Lookup to projects collection
       {
         $lookup: {
           from: "projects",
@@ -207,12 +197,12 @@ const getAllLeadsForAdmin = async (req, res) => {
             $cond: [
               { $gt: [{ $size: "$interested_project" }, 0] },
               { $arrayElemAt: ["$interested_project.project_title", 0] },
-              "$interested_in" // fallback to original value (custom string)
+              "$interested_in" 
             ]
           }
         }
       },
-      { $project: { interested_project: 0 } }, // remove raw project data
+      { $project: { interested_project: 0 } }, 
       { $sort: { createdAt: -1 } },
     ];
 
@@ -237,7 +227,6 @@ const getAllLeadsForChannelPartner = async (req, res) => {
       return handleResponse(res, 403, "Access Denied: Channel Partner only.");
     }
 
-    // Build the match stage
     let matchStage = {
       $and: [
         {
@@ -321,19 +310,15 @@ const getAllLeadsForChannelPartner = async (req, res) => {
           assigned_agent: 0,
           assigned_channel_partner: 0,
           __v: 0,
-          // Optionally show or remove fields: created_by_id, created_by
         },
       },
       { $sort: { createdAt: -1 } },
     ];
 
-    // Fetch leads
     const leads = await Lead.aggregate(pipeline);
 
-    // Fetch master statuses
     const masterStatuses = await MasterStatus.find({ deleted: false }).lean();
 
-    // Calculate status breakdown
     const statusCounts = leads.reduce((acc, lead) => {
       const st = lead.status?.toLowerCase();
       if (st) acc[st] = (acc[st] || 0) + 1;
@@ -348,7 +333,6 @@ const getAllLeadsForChannelPartner = async (req, res) => {
 
     statusBreakdown.totalItems = leads.length;
 
-    // Count by source_type ("self_lead" or "admin_assigned_lead")
     const typeCounts = leads.reduce(
       (acc, lead) => {
         if (lead.source_type === "self_lead") acc.self_lead_count++;
@@ -358,7 +342,6 @@ const getAllLeadsForChannelPartner = async (req, res) => {
       { self_lead_count: 0, admin_assigned_lead_count: 0 }
     );
 
-    // Done — prepare final response data
     return handleResponse(res, 200, "Leads fetched successfully", {
       results: leads,
       self_lead_count: typeCounts.self_lead_count,
@@ -529,7 +512,6 @@ const getAllLeadsForAgent = async (req, res) => {
           ]
         },
         {
-          // Exclude leads that are broadcasted and not accepted by this agent
           $or: [
             { is_broadcasted: { $ne: true } },
             { lead_accepted_by: new mongoose.Types.ObjectId(String(userId)) }
@@ -830,7 +812,6 @@ const updateLeadStatus = async ({ req, res, allowedRole }) => {
       userName,
     });
 
-    // === Validate Body ===
     const { error } = updateLeadSchema.validate(req.body);
     if (error) {
       const cleanMessage = error.message.replace(/\"/g, "");
@@ -873,7 +854,6 @@ const updateLeadStatus = async ({ req, res, allowedRole }) => {
       }
     }
 
-    // === Handle Broadcast Accept/Decline ===
     if (lead.is_broadcasted && Array.isArray(lead.broadcasted_to) && lead.broadcasted_to.map(id => id.toString()).includes(userId.toString())) {
       console.log("📡 Broadcast accept/decline path triggered");
 
@@ -884,7 +864,7 @@ const updateLeadStatus = async ({ req, res, allowedRole }) => {
           return handleResponse(res, 409, `Lead already accepted by ${lead.lead_accepted_by_name}`);
         }
 
-        console.log("✅ Lead is being accepted");
+        console.log("✅Lead is being accepted");
 
         const broadcastedAgents = lead.broadcasted_to.filter(agentId => agentId && typeof agentId.toString === "function");
 
@@ -1049,11 +1029,11 @@ const updateLeadStatus = async ({ req, res, allowedRole }) => {
       status: entry.status,
     }));
 
-    console.log("✅ Final updated lead object:", leadObj);
+    console.log("Final updated lead object:", leadObj);
 
     return handleResponse(res, 200, "Lead updated successfully", leadObj);
   } catch (err) {
-    console.error("❌ Error updating lead:", err);
+    console.error("Error updating lead:", err);
     return handleResponse(res, 500, "Internal Server Error");
   }
 };
@@ -1081,7 +1061,7 @@ const getLeadDetailsByAgentId = async (req, res) => {
     const pipeline = [
       {
         $match: {
-          assigned_to: new mongoose.Types.ObjectId(agentId),
+          assigned_to: new mongoose.Types.ObjectId(String(agentId)),
           assigned_to_model: "Agent",
         }
       },
@@ -1097,7 +1077,6 @@ const getLeadDetailsByAgentId = async (req, res) => {
         }
       },
       {
-        // Lookup project info to get project_title
         $lookup: {
           from: "projects",
           let: { interestedInId: "$interested_in" },
@@ -1118,7 +1097,6 @@ const getLeadDetailsByAgentId = async (req, res) => {
         $addFields: {
           status_readable: { $arrayElemAt: ["$status_info.name", 0] },
 
-          // keep interested_in_Id as is
           interested_in_Id: {
             $cond: [
               { $eq: [{ $type: "$interested_in" }, "objectId"] },
@@ -1127,7 +1105,6 @@ const getLeadDetailsByAgentId = async (req, res) => {
             ]
           },
 
-          // Replace interested_in with project_title if found; else keep original interested_in value
           interested_in: {
             $cond: [
               { $gt: [{ $size: "$interested_in_info" }, 0] },
@@ -1233,7 +1210,7 @@ const acceptLead = async (req, res) => {
     }
 
 
-    // ✅ Notify admins
+    //Notify admins
     console.log(`🔔 Notifying admins about lead acceptance by ${agentName} (agent)`);
     io.to("admins").emit("lead_accepted", {
       leadId: lead._id,
@@ -1255,7 +1232,7 @@ const acceptLead = async (req, res) => {
 
 const declineLead = async (req, res) => {
   try {
-    const io = req.io; // 🔥 Add this line
+    const io = req.io; 
     const { leadId } = req.params;
     const agentId = req.user.id;
     const agentName = req.user.username;
@@ -1273,7 +1250,7 @@ const declineLead = async (req, res) => {
     lead.broadcasted_to = lead.broadcasted_to.filter(id => id.toString() !== agentId);
     await lead.save();
 
-    // ✅ Optionally notify admins
+    //notify admins
     io.to("admins").emit("lead_declined", {
       leadId,
       declinedBy: {
@@ -1398,7 +1375,7 @@ const getAllBroadCastedLeads = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Error fetching broadcasted leads:", error);
+    console.error("Error fetching broadcasted leads:", error);
     return handleResponse(res, 500, "Internal Server Error");
   }
 };

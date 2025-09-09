@@ -100,7 +100,7 @@ const loginAgent = async (req, res) => {
         id: agent._id,
         name: agent.name,
         role: agent.role,
-        firm_name: agent.firm_name, // only if this exists in the Agent model
+        firm_name: agent.firm_name,
         token
       });
     }
@@ -117,18 +117,14 @@ const loginAgent = async (req, res) => {
       }
 
       if (agent.status !== "active") {
-        return handleResponse(
-          res,
-          403,
-          "Your account has not been verified by the admin. Please wait for admin approval."
-        );
+        return handleResponse(res, 403, "Your account has not been verified by the admin. Please wait for admin approval.");
       }
 
       const token = await signAccessToken(agent._id, agent.role, agent.email);
       return handleResponse(res, 200, "Login successful", {
         name: agent.name,
         role: agent.role,
-        firm_name: agent.firm_name, // only if this exists
+        firm_name: agent.firm_name, 
         token
       });
     }
@@ -147,7 +143,7 @@ const getAllAgents = async (req, res) => {
       return handleResponse(res, 403, "Access denied. Admins only.");
     }
 
-    const { q = "", status, page = 1, perPage = 100 } = req.query; // Extract page and perPage from query params
+    const { q = "", status, page = 1, perPage = 100 } = req.query; 
 
     const matchStage = {
       role: "agent",
@@ -177,54 +173,35 @@ const getAllAgents = async (req, res) => {
 
     const pipeline = [
       { $match: matchStage },
-      // {
-      //   $lookup: {
-      //     from: "leads",
-      //     let: { agentId: "$_id" },
-      //     pipeline: [
-      //       {
-      //         $match: {
-      //           $expr: {
-      //             $and: [
-      //               { $eq: ["$assigned_to", "$$agentId"] },
-      //               { $eq: ["$assigned_to_model", "Agent"] }
-      //             ]
-      //           }
-      //         }
-      //       }
-      //     ],
-      //     as: "lead_details",
-      //   },
-      // },
       {
-  $lookup: {
-    from: "leads",
-    let: { agentId: "$_id" },
-    pipeline: [
-      {
-        $match: {
-          $expr: {
-            $or: [
-              {
-                $and: [
-                  { $eq: ["$assigned_to", "$$agentId"] },
-                  { $eq: ["$assigned_to_model", "Agent"] }
-                ]
-              },
-              {
-                $and: [
-                  { $eq: ["$created_by", "agent"] },
-                  { $eq: ["$created_by_id", "$$agentId"] }
-                ]
+        $lookup: {
+          from: "leads",
+          let: { agentId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    {
+                      $and: [
+                        { $eq: ["$assigned_to", "$$agentId"] },
+                        { $eq: ["$assigned_to_model", "Agent"] }
+                      ]
+                    },
+                    {
+                      $and: [
+                        { $eq: ["$created_by", "agent"] },
+                        { $eq: ["$created_by_id", "$$agentId"] }
+                      ]
+                    }
+                  ]
+                }
               }
-            ]
-          }
-        }
-      }
-    ],
-    as: "lead_details",
-  },
-},
+            }
+          ],
+          as: "lead_details",
+        },
+      },
 
       {
         $addFields: {

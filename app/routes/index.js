@@ -6,6 +6,7 @@ import leadRoutes from "./leads.js";
 import masterStatusRoutes from "./masterStatus.js";
 import customerRoutes from "./customers.js";
 import projectRoutes from "./projects.js";
+import chatRoutes from "./chat.js";
 
 const setupRoutes = (app, io) => {
     app.use("/api/v1/admin", userRoutes);
@@ -16,6 +17,7 @@ const setupRoutes = (app, io) => {
     app.use("/api/v1/master-status", masterStatusRoutes);
     app.use("/api/v1/customers", customerRoutes);
     app.use("/api/v1/projects", projectRoutes);
+    app.use("/api/v1/chat", chatRoutes);
 };
 
 export default setupRoutes;

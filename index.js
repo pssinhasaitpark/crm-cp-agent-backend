@@ -9,6 +9,8 @@ import { Server as SocketIO } from "socket.io";
 import connectDB from "./app/dbConfig/dbConfig.js";
 import setupRoutes from "./app/routes/index.js";
 import mediasetup from "./app/routes/media.js";
+import { initializeSocket } from "./app/utils/socketHandler.js";
+import { attachSocket } from "./app/middlewares/attachSocket.js";
 
 dotenv.config();
 
@@ -66,27 +68,9 @@ const io = new SocketIO(server, {
     credentials: true,
   },
 });
+initializeSocket(io);
 
-io.on("connection", (socket) => {
-  console.log("￼ New client connected:", socket.id);
-
-  // agent room join
-  socket.on("join-agent", ({ agentId }) => {
-    if (!agentId) return;
-    console.log(`Agent ${agentId} joined room with socket ${socket.id}`);
-    socket.join(agentId); 
-  });
-
-  // admin join
-  socket.on("join-admin", ({ adminId }) => {
-    socket.join("admins"); 
-    console.log(`Admin joined: ${adminId}`);
-  });
-  
-  socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
-  });
-});
+app.use(attachSocket(io));
 
 setupRoutes(app, io);
 mediasetup(app);

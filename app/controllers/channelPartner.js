@@ -183,16 +183,13 @@ const getChannelPartnerLeadCount = async (channelPartnerId) => {
     {
       $match: {
         $or: [
-          // 1. Created by the CP
           { created_by_id: cpObjectId },
 
-          // 2. Created by CP & assigned to agent (already covered, but redundant with above)
           {
             assigned_to_model: "Agent",
             created_by_id: cpObjectId,
           },
 
-          // ✅ 3. Assigned directly to the CP
           {
             assigned_to: cpObjectId,
             assigned_to_model: "ChannelPartner",
