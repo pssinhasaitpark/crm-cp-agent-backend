@@ -21,6 +21,7 @@ const agentSchema = new mongoose.Schema(
       enum: ["active", "inactive"],
       default: "inactive",
     },
+    last_seen: { type: Date, default: null },
     deleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
   },

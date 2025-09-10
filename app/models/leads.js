@@ -8,7 +8,6 @@ const LeadSchema = new mongoose.Schema({
   // interested_in: { type: String, required: true },
   interested_in: { type: mongoose.Schema.Types.Mixed, required: true },
   source: { type: String, required: true },
-  // date: { type: String, required: true },
   status: { type: String, default: "new" },
 
   address: { type: String },
@@ -47,6 +46,21 @@ const LeadSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Agent"
   }],
+
+ follow_ups: [
+  {
+    task: { type: String },
+    notes: { type: String },
+    follow_up_date: { type: Date },
+    added_by: {
+      id: { type: mongoose.Schema.Types.ObjectId },
+      name: { type: String },
+      role: { type: String }
+    },
+    created_at: { type: Date, default: Date.now }
+  }
+],
+
 
 }, { timestamps: true });
 
