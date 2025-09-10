@@ -190,12 +190,26 @@ const getChatHistoryOfAgentCPById = async (req, res) => {
       return handleResponse(res, 404, "No chat found with this user.");
     }
 
+    const agent = await Agent.findById(targetUserId).select("name profile_photo last_seen");
+
+    let status = "offline";
+    if (agent.last_seen === null) {
+      status = "online";
+    } else {
+      status = `last seen at ${agent.last_seen.toISOString()}`; // or use moment.js for relative time
+    }
     return handleResponse(res, 200, "Chat history fetched", {
       _id: chat._id,
       participants: chat.participants,
+      status: status,
       messages: chat.messages,
       createdAt: chat.createdAt,
       updatedAt: chat.updatedAt,
+      // participantInfo: {
+      //   _id: agent._id,
+      //   name: agent.name,
+      //   profile_photo: agent.profile_photo,
+      // }
     });
 
   } catch (error) {
