@@ -343,9 +343,50 @@ const getAllChatParticipantsWithLastMessage = async (req, res) => {
   }
 };
 
+const getChatHistoryWithAdmin = async (req, res) => {
+  try {
+    const requesterId = req.user.id;
+    const requesterRole = req.user.role || req.user.user_role;
+    const adminId = req.params.adminId;
+
+    // Only agents and CPs can use this endpoint
+    if (!["agent", "channel_partner"].includes(requesterRole)) {
+      return handleResponse(res, 403, "Access denied. Only agents or channel partners can access this endpoint.");
+    }
+
+    // Validate that the target user is an admin
+    const adminUser = await User.findOne({ _id: adminId, role: "admin" });
+    if (!adminUser) {
+      return handleResponse(res, 404, "Admin not found.");
+    }
+
+    // Check chat between the agent/CP and the admin
+    const chat = await Chat.findOne({
+      participants: { $all: [requesterId, adminId] },
+    }).lean();
+
+    if (!chat) {
+      return handleResponse(res, 404, "No chat history with this admin.");
+    }
+
+    return handleResponse(res, 200, "Chat history with admin fetched", {
+      _id: chat._id,
+      participants: chat.participants,
+      messages: chat.messages,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+    });
+
+  } catch (error) {
+    console.error("Error in getChatHistoryWithAdmin:", error);
+    return handleResponse(res, 500, "Internal server error", { error: error.message });
+  }
+};
+
 export const chats = {
   createChat,
   getAllChatHistory,
   getChatHistoryOfAgentCPById,
-  getAllChatParticipantsWithLastMessage
+  getAllChatParticipantsWithLastMessage,
+  getChatHistoryWithAdmin
 };

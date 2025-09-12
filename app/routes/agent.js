@@ -22,4 +22,14 @@ router.get("/agent/:id", verifyToken, agent.getAgentById);
 
 router.delete("/:id", verifyToken, agent.deleteAgentById);
 
+router.get("/me", verifyToken, agent.me);
+
+router.get("/my-follow-ups", verifyToken, agent.getMyFollowUps);
+
+router.post("/follow-up/:leadId", verifyToken, agent.addFollowUp);
+
+router.post("/notes", verifyToken, agent.addPersonalNotes);
+
+router.get("/notes", verifyToken, agent.getAllAgentNotes);
+
 export default router;

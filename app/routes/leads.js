@@ -58,10 +58,6 @@ export default function (io) {
   router.post("/accept/:leadId", verifyToken, leads.acceptLead);
   router.post("/decline/:leadId", verifyToken, leads.declineLead);
 
-  router.post("/follow-up/:leadId", verifyToken, leads.addFollowUp);
-
-
-
   return router;
 }
 

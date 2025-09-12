@@ -11,4 +11,6 @@ router.post("/login", admin.loginAdmin)
 
 router.patch("/:id", verifyToken, admin.approveUserStatusById);
 
+router.get("/me", verifyToken, admin.me);
+
 export default router;

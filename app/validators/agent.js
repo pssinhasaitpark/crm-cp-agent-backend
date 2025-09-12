@@ -1,5 +1,6 @@
 // app/validators/agent.js
 import Joi from "joi";
+import dayjs from "dayjs";
 
 export const createAgentValidator = Joi.object({
   name: Joi.string().min(3).max(50).required().messages({
@@ -43,4 +44,28 @@ export const createAgentValidator = Joi.object({
     }),
 
   referral_code: Joi.string().optional(),
+});
+
+export const followUpSchema = Joi.object({
+  task: Joi.string().optional(),
+  notes: Joi.string().optional(),
+  follow_up_date: Joi.string()
+    .pattern(/^\d{2}\/\d{2}\/\d{4}$/)
+    .message("follow_up_date must be in DD/MM/YYYY format")
+    .optional()
+    .custom((value, helpers) => {
+      const date = dayjs(value, "DD/MM/YYYY");
+
+      if (!date.isValid()) {
+        return helpers.message("Invalid follow_up_date format");
+      }
+
+      const today = dayjs().startOf("day");
+
+      if (date.isBefore(today)) {
+        return helpers.message("follow_up_date cannot be in the past");
+      }
+
+      return value;
+    }),
 });

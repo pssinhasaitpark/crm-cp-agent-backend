@@ -4,7 +4,7 @@ import Agent from "../models/agent.js";
 import ChannelPartner from "../models/channelPartner.js";
 import MasterStatus from "../models/masterStatus.js";
 import Project from "../models/projects.js";
-import { getLeadValidationSchema, updateLeadSchema, followUpSchema } from "../validators/leads.js";
+import { getLeadValidationSchema, updateLeadSchema } from "../validators/leads.js";
 import { handleResponse } from "../utils/helper.js";
 import mongoose from "mongoose";
 
@@ -1130,49 +1130,6 @@ const getAllBroadCastedLeads = async (req, res) => {
   }
 };
 
-const addFollowUp = async (req, res) => {
-  try {
-    const { leadId } = req.params;
-    const user = req.user;
-
-    if (!mongoose.Types.ObjectId.isValid(leadId)) {
-      return handleResponse(res, 400, "Invalid lead ID");
-    }
-
-    const { error, value } = followUpSchema.validate(req.body, { abortEarly: false });
-    if (error) {
-      return handleResponse(res, 400, error.details[0].message);
-    }
-
-    const lead = await Lead.findById(leadId);
-    if (!lead) {
-      return handleResponse(res, 404, "Lead not found");
-    }
-
-    const followUpData = {
-      ...value,
-      added_by: {
-        id: user.id,
-        name: user.username,
-        role: user.user_role,
-      },
-      created_at: new Date(),
-    };
-
-    if (!Array.isArray(lead.follow_ups)) {
-      lead.follow_ups = [];
-    }
-
-    lead.follow_ups.push(followUpData);
-    await lead.save();
-
-    return handleResponse(res, 201, "Follow-up added successfully", { ...followUpData, });
-  } catch (err) {
-    console.error("Error in addFollowUp:", err.message);
-    return handleResponse(res, 500, "Server error", { error: err.message });
-  }
-};
-
 export const leads = {
   createLead,
   getLeadById,
@@ -1187,5 +1144,4 @@ export const leads = {
   acceptLead,
   declineLead,
   getAllBroadCastedLeads,
-  addFollowUp
 };

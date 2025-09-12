@@ -1,6 +1,6 @@
 //app/validators/leads.js
 import Joi from "joi";
-import dayjs from "dayjs";
+// import dayjs from "dayjs";
 
 const baseSchema = {
   name: Joi.string().required(),
@@ -46,29 +46,4 @@ export const updateLeadSchema = Joi.object({
   status: Joi.string().optional(),
   assigned_to: Joi.string().optional(),
 }).unknown(false); 
-
-
-export const followUpSchema = Joi.object({
-  task: Joi.string().optional(),
-  notes: Joi.string().optional(),
-  follow_up_date: Joi.string()
-    .pattern(/^\d{2}\/\d{2}\/\d{4}$/)
-    .message("follow_up_date must be in DD/MM/YYYY format")
-    .optional()
-    .custom((value, helpers) => {
-      const date = dayjs(value, "DD/MM/YYYY");
-
-      if (!date.isValid()) {
-        return helpers.message("Invalid follow_up_date format");
-      }
-
-      const today = dayjs().startOf("day");
-
-      if (date.isBefore(today)) {
-        return helpers.message("follow_up_date cannot be in the past");
-      }
-
-      return value;
-    }),
-});
 
