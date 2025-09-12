@@ -137,9 +137,30 @@ const approveUserStatusById = async (req, res) => {
   }
 };
 
+const me = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return handleResponse(res, 401, "Unauthorized: No user ID found in request.");
+    }
+
+    const user = await User.findById(userId).select("-password -createdAt -updatedAt -__v");
+
+    if (!user) {
+      return handleResponse(res, 404, "User not found.");
+    }
+
+    return handleResponse(res, 200, "Admin details fetched successfully", {...user.toObject()});
+  } catch (error) {
+    console.error("Error getting admin details:", error);
+    return handleResponse(res, 500, "Server error");
+  }
+};
+
 export const admin = {
   createAdmin,
   loginAdmin,
   approveUserStatusById,
-
+  me
 }

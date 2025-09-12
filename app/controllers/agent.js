@@ -2,11 +2,13 @@
 import bcrypt from "bcryptjs";
 import Agent from "../models/agent.js";
 import ChannelPartner from "../models/channelPartner.js";
+import { followUpSchema } from "../validators/agent.js";
 import { handleResponse } from "../utils/helper.js";
 import { createAgentValidator } from "../validators/agent.js";
 import { uploadFilesToCloudinary } from "../middlewares/multer.js";
 import { signAccessToken } from "../middlewares/jwtAuth.js";
 import mongoose from "mongoose";
+import Lead from "../models/leads.js";
 
 const createAgent = async (req, res) => {
   try {
@@ -124,7 +126,7 @@ const loginAgent = async (req, res) => {
       return handleResponse(res, 200, "Login successful", {
         name: agent.name,
         role: agent.role,
-        firm_name: agent.firm_name, 
+        firm_name: agent.firm_name,
         token
       });
     }
@@ -143,7 +145,7 @@ const getAllAgents = async (req, res) => {
       return handleResponse(res, 403, "Access denied. Admins only.");
     }
 
-    const { q = "", status, page = 1, perPage = 100 } = req.query; 
+    const { q = "", status, page = 1, perPage = 100 } = req.query;
 
     const matchStage = {
       role: "agent",
@@ -387,11 +389,264 @@ const deleteAgentById = async (req, res) => {
   }
 };
 
+const me = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+
+    if (!userId || role !== "agent") {
+      return handleResponse(res, 403, "Unauthorized access. Only agents can fetch this detail.");
+    }
+
+    // ✅ Get agent profile
+    const agent = await Agent.findById(userId)
+      .select("-createdAt -updatedAt -__v -deleted -deletedAt -last_seen");
+
+    if (!agent) {
+      return handleResponse(res, 404, "Agent not found");
+    }
+
+    // ✅ Count & summarize leads using aggregation
+    const leads = await Lead.aggregate([
+      {
+        $match: {
+          $and: [
+            {
+              $or: [
+                { created_by_id: new mongoose.Types.ObjectId(String(userId)) },
+                { assigned_to: new mongoose.Types.ObjectId(String(userId)) },
+                { declined_by: new mongoose.Types.ObjectId(String(userId)) },
+              ],
+            },
+            {
+              $or: [
+                { is_broadcasted: { $ne: true } },
+                { lead_accepted_by: new mongoose.Types.ObjectId(String(userId)) },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // ✅ Convert to key-value format
+    const statusBreakdown = leads.reduce((acc, curr) => {
+      acc.totalItems = (acc.totalItems || 0) + curr.count;
+      const statusKey = curr._id?.toLowerCase() || "unknown";
+      acc[statusKey] = curr.count;
+      return acc;
+    }, {});
+
+    // ✅ Count leads accepted from broadcast
+    const broadcastCount = await Lead.countDocuments({
+      is_broadcasted: false,
+      lead_accepted_by: new mongoose.Types.ObjectId(String(userId)),
+    });
+
+    // ✅ Response
+    return handleResponse(res, 200, "Agent profile fetched successfully", {
+      ...agent.toObject(),
+      leads_summary: statusBreakdown,
+      broadcast_leads_count: broadcastCount,
+    });
+  } catch (error) {
+    console.error("Error in me:", error);
+    return handleResponse(res, 500, "Server error");
+  }
+};
+
+const addFollowUp = async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const user = req.user;
+
+    if (!mongoose.Types.ObjectId.isValid(leadId)) {
+      return handleResponse(res, 400, "Invalid lead ID");
+    }
+
+    const { error, value } = followUpSchema.validate(req.body, { abortEarly: false });
+    if (error) {
+      return handleResponse(res, 400, error.details[0].message);
+    }
+
+    const lead = await Lead.findById(leadId);
+    if (!lead) {
+      return handleResponse(res, 404, "Lead not found");
+    }
+
+    const followUpData = {
+      ...value,
+      added_by: {
+        id: user.id,
+        name: user.username,
+        role: user.user_role,
+      },
+      created_at: new Date(),
+    };
+
+    if (!Array.isArray(lead.follow_ups)) {
+      lead.follow_ups = [];
+    }
+
+    lead.follow_ups.push(followUpData);
+    await lead.save();
+
+    return handleResponse(res, 201, "Follow-up added successfully", { ...followUpData, });
+  } catch (err) {
+    console.error("Error in addFollowUp:", err.message);
+    return handleResponse(res, 500, "Server error", { error: err.message });
+  }
+};
+
+const getMyFollowUps = async (req, res) => {
+  try {
+    const user = req.user;
+
+    const leads = await Lead.find({
+      "follow_ups.added_by.id": user.id,
+    }).select("name follow_ups");
+
+    const myFollowUps = [];
+
+    leads.forEach((lead) => {
+      lead.follow_ups.forEach((followUp) => {
+        if (followUp.added_by?.id?.toString() === user.id.toString()) {
+          myFollowUps.push({
+            lead_name: lead.name,
+            lead_id: lead._id,
+            task: followUp.task,
+            notes: followUp.notes,
+            follow_up_date: followUp.follow_up_date,
+          });
+        }
+      });
+    });
+
+    return handleResponse(res, 200, "Follow-ups fetched successfully", { results: myFollowUps });
+  } catch (err) {
+    console.error("Error in getMyFollowUps:", err.message);
+    return handleResponse(res, 500, "Server error", { error: err.message });
+  }
+};
+
+const addPersonalNotes = async (req, res) => {
+  try {
+    const { notes } = req.body; // notes = "some text"
+    const agentId = req.params?.id || req.user?.id;
+
+    if (!notes) {
+      return handleResponse(res, 400, "Notes is required");
+    }
+
+    const updatedAgent = await Agent.findByIdAndUpdate(
+      agentId,
+      {
+        $push: { notes: { message: notes } }
+      },
+      { new: true }
+    );
+
+    if (!updatedAgent) {
+      return handleResponse(res, 404, "Agent not found");
+    }
+
+    return handleResponse(res, 201, "Note added successfully");
+  } catch (error) {
+    console.error("Error creating note", error);
+    return handleResponse(res, 500, "Internal Server Error");
+  }
+};
+
+const getAllAgentNotes = async (req, res) => {
+  try {
+    const agentId = req.user?.id;
+
+    if (!agentId) {
+      return res.status(401).json({
+        success: false,
+        error: true,
+        message: "Unauthorized: Agent ID missing in token",
+      });
+    }
+
+    const pipeline = [
+      {
+        $match: {
+          _id: new mongoose.Types.ObjectId(agentId),
+          deleted: false
+        }
+      },
+      {
+        // Sort notes array descending by createdAt
+        $addFields: {
+          notes: {
+            $sortArray: {
+              input: "$notes",
+              sortBy: { createdAt: -1 }
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          notes: {
+            $map: {
+              input: "$notes",
+              as: "note",
+              in: {
+                _id: "$$note._id",
+                message: "$$note.message",
+                createdAt: "$$note.createdAt"
+              }
+            }
+          }
+        }
+      }
+    ];
+
+    const result = await Agent.aggregate(pipeline);
+
+    if (!result || result.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: true,
+        message: "Agent not found or no notes available"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      error: false,
+      message: "Agent notes fetched successfully",
+      notes: result[0].notes
+    });
+  } catch (error) {
+    console.error("Error fetching agent notes", error);
+    return res.status(500).json({
+      success: false,
+      error: true,
+      message: "Internal Server Error"
+    });
+  }
+};
+
 export const agent = {
   createAgent,
   loginAgent,
   getAllAgents,
   getAllAgentsForChannelPartner,
   getAgentById,
-  deleteAgentById
+  deleteAgentById,
+  me,
+  addFollowUp,
+  getMyFollowUps,
+  addPersonalNotes,
+  getAllAgentNotes
 };

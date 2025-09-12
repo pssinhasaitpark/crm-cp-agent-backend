@@ -13,4 +13,6 @@ router.get("/history/:userId", verifyToken, chats.getChatHistoryOfAgentCPById);
 
 router.get("/participants", verifyToken, chats.getAllChatParticipantsWithLastMessage);
 
+router.get("/history-with-admin/:adminId", verifyToken, chats.getChatHistoryWithAdmin); // ✅ New route
+
 export default router;

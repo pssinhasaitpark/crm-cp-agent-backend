@@ -22,6 +22,13 @@ const agentSchema = new mongoose.Schema(
       default: "inactive",
     },
     last_seen: { type: Date, default: null },
+    notes: [
+      {
+        message: { type: String, required: true },
+        createdAt: { type: Date, default: Date.now },
+      }
+    ],
+
     deleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
   },
