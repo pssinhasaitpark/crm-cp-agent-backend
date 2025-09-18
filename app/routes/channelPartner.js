@@ -6,11 +6,11 @@ import { upload,uploadFilesToCloudinary } from "../middlewares/multer.js";
 
 const router = express.Router();
 
-//Admin creates channel partner (protected)
-router.post("/admin/create", verifyToken, upload, channelPartner.createChannelPartner);
+router.get("/me", verifyToken, channelPartner.me);
 
-//Self-registration (no token required)
-router.post("/sign-up", upload, channelPartner.createChannelPartner);
+router.post("/admin/create", verifyToken, upload, channelPartner.createChannelPartner); //Admin creates channel partner (protected)
+
+router.post("/sign-up", upload, channelPartner.createChannelPartner);     //Self-registration (no token required)
 
 router.post("/login", channelPartner.loginChannelPartner);
 
