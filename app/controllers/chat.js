@@ -342,7 +342,7 @@ const getAllChatParticipantsWithLastMessage = async (req, res) => {
     return handleResponse(res, 500, "Internal server error", { error: error.message });
   }
 };
-
+/*
 const getChatHistoryWithAdmin = async (req, res) => {
   try {
     const requesterId = req.user.id;
@@ -382,6 +382,218 @@ const getChatHistoryWithAdmin = async (req, res) => {
     return handleResponse(res, 500, "Internal server error", { error: error.message });
   }
 };
+*/
+
+/*
+//pagination 1-20, 21-40,.........
+const getChatHistoryWithAdmin = async (req, res) => {
+  try {
+    const requesterId = req.user.id;
+    const requesterRole = req.user.role || req.user.user_role;
+    const adminId = req.params.adminId;
+
+    if (!["agent", "channel_partner"].includes(requesterRole)) {
+      return handleResponse(res, 403, "Access denied. Only agents or channel partners can access this endpoint.");
+    }
+
+    const adminUser = await User.findOne({ _id: adminId, role: "admin" });
+    if (!adminUser) {
+      return handleResponse(res, 404, "Admin not found.");
+    }
+
+    const { page = 1, perPage = 20 } = req.query;
+    const perPageNum = Number(perPage);
+    const skip = (page - 1) * perPageNum;
+
+    const chat = await Chat.findOne({
+      participants: { $all: [requesterId, adminId] },
+    }).lean();
+
+    if (!chat) {
+      return handleResponse(res, 404, "No chat history with this admin.");
+    }
+
+    const totalMessages = chat.messages.length;
+    const totalPages = Math.ceil(totalMessages / perPageNum);
+
+    // ✅ Step 1: Get latest N messages
+    const start = Math.max(totalMessages - (skip + perPageNum), 0);
+    const end = totalMessages - skip;
+    const latestMessages = chat.messages.slice(start, end);
+
+    // ✅ Step 2: Sort them in ASCENDING order (oldest at top, latest at bottom)
+    latestMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    return handleResponse(res, 200, "Chat history with admin fetched", {
+      _id: chat._id,
+      participants: chat.participants,
+      messages: latestMessages, // ✅ Now properly sorted
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+      pagination: {
+        totalMessages,
+        totalPages,
+        currentPage: Number(page),
+        perPage: perPageNum,
+        totalMessagesOnCurrentPage: latestMessages.length,
+      },
+    });
+
+  } catch (error) {
+    console.error("Error in getChatHistoryWithAdmin:", error);
+    return handleResponse(res, 500, "Internal server error", { error: error.message });
+  }
+};
+*/
+
+/*
+//1-20, 1-40, 1-60
+const getChatHistoryWithAdmin = async (req, res) => {
+  try {
+    const requesterId = req.user.id;
+    const requesterRole = req.user.role || req.user.user_role;
+    const adminId = req.params.adminId;
+
+    // Role check
+    if (!["agent", "channel_partner"].includes(requesterRole)) {
+      return handleResponse(
+        res,
+        403,
+        "Access denied. Only agents or channel partners can access this endpoint."
+      );
+    }
+
+    // Check admin existence
+    const adminUser = await User.findOne({ _id: adminId, role: "admin" });
+    if (!adminUser) {
+      return handleResponse(res, 404, "Admin not found.");
+    }
+
+    // Pagination params
+    const { page = 1, perPage = 20 } = req.query;
+    const perPageNum = Number(perPage);
+    const currentPage = Number(page);
+
+    // Fetch chat
+    const chat = await Chat.findOne({
+      participants: { $all: [requesterId, adminId] },
+    }).lean();
+
+    if (!chat) {
+      return handleResponse(res, 404, "No chat history with this admin.");
+    }
+
+    const totalMessages = chat.messages.length;
+    const totalPages = Math.ceil(totalMessages / perPageNum);
+
+    // ✅ Get cumulative messages up to the current page
+    const end = totalMessages; // always include the latest
+    const start = Math.max(totalMessages - currentPage * perPageNum, 0);
+    const messages = chat.messages.slice(start, end);
+
+    // ✅ Sort in ascending order (oldest to latest)
+    messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    // ✅ Respond
+    return handleResponse(res, 200, "Chat history with admin fetched", {
+      _id: chat._id,
+      participants: chat.participants,
+      messages,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+      pagination: {
+        totalMessages,
+        totalPages,
+        currentPage,
+        perPage: perPageNum,
+        totalMessagesOnCurrentPage: messages.length,
+      },
+    });
+
+  } catch (error) {
+    console.error("Error in getChatHistoryWithAdmin:", error);
+    return handleResponse(res, 500, "Internal server error", { error: error.message });
+  }
+};
+*/
+
+//
+const getChatHistoryWithAdmin = async (req, res) => {
+  try {
+    const requesterId = req.user.id;
+    const requesterRole = req.user.role || req.user.user_role;
+    const adminId = req.params.adminId;
+
+    // Role check
+    if (!["agent", "channel_partner"].includes(requesterRole)) {
+      return handleResponse(
+        res,
+        403,
+        "Access denied. Only agents or channel partners can access this endpoint."
+      );
+    }
+
+    // Check admin existence
+    const adminUser = await User.findOne({ _id: adminId, role: "admin" });
+    if (!adminUser) {
+      return handleResponse(res, 404, "Admin not found.");
+    }
+
+    const { page, perPage = 20 } = req.query;
+    const perPageNum = Number(perPage);
+
+    // Fetch chat
+    const chat = await Chat.findOne({
+      participants: { $all: [requesterId, adminId] },
+    }).lean();
+
+    if (!chat) {
+      return handleResponse(res, 404, "No chat history with this admin.");
+    }
+
+    const totalMessages = chat.messages.length;
+    let messages = [];
+    let totalPages = 1;
+    let currentPage = 1;
+
+    if (page) {
+      // ✅ Pagination logic only if "page" param is present
+      currentPage = Number(page);
+      totalPages = Math.ceil(totalMessages / perPageNum);
+
+      const end = totalMessages;
+      const start = Math.max(totalMessages - currentPage * perPageNum, 0);
+      messages = chat.messages.slice(start, end);
+    } else {
+      // ✅ No "page" param: return ALL messages
+      messages = chat.messages;
+    }
+
+    // ✅ Sort in ascending order (oldest to newest)
+    messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    // ✅ Respond
+    return handleResponse(res, 200, "Chat history with admin fetched", {
+      _id: chat._id,
+      participants: chat.participants,
+      messages,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+      pagination: {
+        totalMessages,
+        totalPages: page ? totalPages : 1,
+        currentPage: page ? currentPage : 1,
+        perPage: page ? perPageNum : totalMessages,
+        totalMessagesOnCurrentPage: messages.length,
+      },
+    });
+
+  } catch (error) {
+    console.error("Error in getChatHistoryWithAdmin:", error);
+    return handleResponse(res, 500, "Internal server error", { error: error.message });
+  }
+};
+
 
 export const chats = {
   createChat,

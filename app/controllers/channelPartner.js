@@ -355,10 +355,34 @@ const deleteChannelPartnerById = async (req, res) => {
   }
 };
 
+const me = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+
+    if(!userId || role!=="channel_partner") {
+      return handleResponse(res, 403, "Unauthorized access. Only channel partner can fetch this detail.")
+    }
+
+    const cp = await ChannelPartner.findById(userId).select("-createdAt -updatedAt -__v -deleted -deletedAt");
+
+    if(!cp) {
+      return handleResponse(res, 404, "Channel Partner Not found");
+    }
+
+    return handleResponse(res, 200, `Channel Partner Detailed Fetched Successfully`, cp.toJSON());
+
+  } catch (error) {
+    console.error("Error in Getting Details", error);
+    return handleResponse(res, 500, `Internal Server Error`);
+  }
+}
+
 export const channelPartner = {
   createChannelPartner,
   loginChannelPartner,
   getAllChannelPartners,
   getChannelPartnerById,
-  deleteChannelPartnerById
+  deleteChannelPartnerById,
+  me
 }
