@@ -9,6 +9,10 @@ import { uploadFilesToCloudinary } from "../middlewares/multer.js";
 import { signAccessToken } from "../middlewares/jwtAuth.js";
 import mongoose from "mongoose";
 import Lead from "../models/leads.js";
+import dayjs from "dayjs";
+import customParseFormat from 'dayjs/plugin/customParseFormat.js';
+
+dayjs.extend(customParseFormat);
 
 const createAgent = async (req, res) => {
   try {
@@ -480,8 +484,15 @@ const addFollowUp = async (req, res) => {
       return handleResponse(res, 404, "Lead not found");
     }
 
+    // Convert follow_up_date string to Date object, if present
+    let followUpDateObj = undefined;
+    if (value.follow_up_date) {
+      followUpDateObj = dayjs(value.follow_up_date, "DD/MM/YYYY").toDate();
+    }
+
     const followUpData = {
       ...value,
+      follow_up_date: followUpDateObj, // save Date object, not string
       added_by: {
         id: user.id,
         name: user.username,
@@ -497,7 +508,7 @@ const addFollowUp = async (req, res) => {
     lead.follow_ups.push(followUpData);
     await lead.save();
 
-    return handleResponse(res, 201, "Follow-up added successfully", { ...followUpData, });
+    return handleResponse(res, 201, "Follow-up added successfully", { ...followUpData });
   } catch (err) {
     console.error("Error in addFollowUp:", err.message);
     return handleResponse(res, 500, "Server error", { error: err.message });
